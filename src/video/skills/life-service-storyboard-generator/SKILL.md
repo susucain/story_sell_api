@@ -85,11 +85,11 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 每次创建脚本时，必须在 `generate_script` 的 `meta.character` 中保存主角色选择。角色描述按需参考 `references/character-prompts.md`，但图片来源必须按以下优先级决定：
 
 1. 用户明确要求“使用这张脸”“用上传人像出镜”时，使用 `mode=user_portrait`，填写该图片素材的 `primaryAssetId`，并填写 `selectionSource=user_explicit`。该图将成为视频生成请求中的第一张图片。
-2. 用户明确说出虚拟角色简称时，使用 `mode=preset_avatar`，填写匹配的 `presetAvatarId`、`presetAlias` 和 `selectionSource=user_explicit`。简称与角色设定见 `references/character-prompts.md`。
+2. 用户明确说出系统虚拟人简称时，使用 `mode=preset_avatar`，填写匹配的 `presetAvatarId`、`presetAlias`、`outfit` 和 `selectionSource=user_explicit`。简称、人设和服装兼容规则见 `references/character-prompts.md` 与 `references/preset-outfits.md`。
 3. 未指定来源但脚本需要人物时，根据商品画像、题材和店铺调性自动选择预置虚拟人像，填写 `selectionSource=auto_selected`。
 4. 不需要人物出镜时，使用 `mode=none`。
 
-用户上传人像但没有明确要求其作为主角色时，只作为分析素材，不得自动绑定。`user_portrait` 与 `preset_avatar` 互斥；不要在同一视频请求中混用真人主角色和虚拟人像。可用的虚拟人像 ID：
+用户上传人像但没有明确要求其作为主角色时，只作为分析素材，不得自动绑定。`user_portrait` 与 `preset_avatar` 互斥；不要在同一视频请求中混用真人主角色和虚拟人像。可用的系统虚拟人像：
 
 - `小叶`：`asset-20260720212547-j4tns`，软萌可爱插画师风格
 - `程曦`：`asset-20260720213034-z8rzr`，互联网大厂实习生风格
@@ -112,8 +112,8 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 根据用户输入，按需读取以下文件（不要跳过）。**直接使用下方给出的完整路径调用 `read_file`，禁止先用 `ls` 探索目录。**
 
 1. **用户画像**：读取 `src/video/skills/life-service-storyboard-generator/.video-storyboard/user-profile.md`（如存在），了解用户偏好。如不存在则使用默认设置。参考：`src/video/skills/life-service-storyboard-generator/references/user-profile.md`。
-2. **角色设定**：如果用户指定了预设角色（如"小丽"、"小蓉"、"小洁"），读取 `src/video/skills/life-service-storyboard-generator/references/character-prompts.md` 中的对应描述。
-3. **预设服装**：如果用户指定了预设服装（如"活力探店装"），读取 `src/video/skills/life-service-storyboard-generator/references/preset-outfits.md` 中的对应服装描述。如未指定，默认使用"活力探店装"（探店视频）或根据场景推荐。
+2. **角色设定**：如果用户指定了系统虚拟人，读取 `src/video/skills/life-service-storyboard-generator/references/character-prompts.md` 中的对应描述。若用户要求已下线的旧文本角色，必须先要求其从 7 个系统虚拟人中选择。
+3. **预设服装**：如果用户指定了预设服装，读取 `src/video/skills/life-service-storyboard-generator/references/preset-outfits.md`。如未指定，使用当前虚拟人的默认服装；不得跨现代和古风视觉族群搭配。
 4. **类型配置**：读取 `src/video/skills/life-service-storyboard-generator/references/type-configuration-center.md` 中对应视频类型的专属配置段落（包含所有3种类型的完整参数、生成规则、示例和检查清单）。
 5. **叙事模式**：读取 `src/video/skills/life-service-storyboard-generator/references/story-patterns.md` 中的叙事模式参考和按类型的头脑风暴问题。
 6. **镜头时长**：读取 `src/video/skills/life-service-storyboard-generator/references/shot-duration.md`。
@@ -275,7 +275,7 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 - **合规**：`references/anti-low-quality-marketing.md`
 - **模板**：`references/seedance_2_0_template.md`
 - **预设服装**：`references/preset-outfits.md`
-- **其他**：`references/user-profile.md`, `references/shot-duration.md`, `references/visual-styles.md`, `references/quick-reference.md`, `references/output-templates.md`, `references/scene-prompts.md`, `references/prop-prompts.md`, `references/audio-bgm.md`, `references/new-outfits-release.md`, `references/outfit-examples.md`, `references/door-detection-rules.md`
+- **其他**：`references/user-profile.md`, `references/shot-duration.md`, `references/visual-styles.md`, `references/quick-reference.md`, `references/output-templates.md`, `references/scene-prompts.md`, `references/prop-prompts.md`, `references/audio-bgm.md`, `references/door-detection-rules.md`
 
 ## ✅ 最佳实践
 - **视觉钩子**：以最吸睛的镜头开场（热气腾腾的食物、繁忙的店铺）。

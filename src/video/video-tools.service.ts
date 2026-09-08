@@ -11,7 +11,12 @@ import { VideoSession } from './entities/video-session.entity';
 import { VideoTask } from './entities/video-task.entity';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoTaskService } from './video-task.service';
-import { getPresetAvatar, isPresetAvatarId } from './preset-avatars';
+import {
+  getPresetAvatar,
+  isLegacyAvatarAlias,
+  isPresetAvatarId,
+  validateAvatarOutfitSelection,
+} from './avatar-catalog';
 import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
 
 interface ToolContext {
@@ -251,6 +256,11 @@ export class VideoToolsService {
             primaryAssetId: z.number().int().positive().optional(),
             presetAvatarId: z.string().optional(),
             presetAlias: z.string().optional(),
+            outfit: z.object({
+              mode: z.enum(['preset', 'custom']),
+              presetOutfitId: z.string().optional(),
+              customPrompt: z.string().optional(),
+            }).optional(),
             selectionSource: z.enum(['user_explicit', 'auto_selected', 'inherited']),
           }),
           edit: editField,
@@ -294,6 +304,9 @@ export class VideoToolsService {
           if (!meta.character.primaryAssetId || meta.character.presetAvatarId) {
             return { success: false, message: '上传人像角色必须且只能绑定 primaryAssetId' };
           }
+          if (meta.character.outfit) {
+            return { success: false, message: '仅系统内置虚拟人支持预设服装' };
+          }
           const portraitAsset = await this.assetRepo.findOne({
             where: {
               id: meta.character.primaryAssetId,
@@ -310,11 +323,28 @@ export class VideoToolsService {
             || !isPresetAvatarId(meta.character.presetAvatarId)) {
             return { success: false, message: '虚拟人像必须使用允许的预置人像 ID' };
           }
-          if (meta.character.presetAlias !== getPresetAvatar(meta.character.presetAvatarId).alias) {
+          const avatar = getPresetAvatar(meta.character.presetAvatarId);
+          if (isLegacyAvatarAlias(meta.character.roleName)) {
+            return {
+              success: false,
+              message: '该角色已下线，请选择小叶、程曦、青黛、小岚、瑶琴、云游或凌霜之一',
+            };
+          }
+          if (meta.character.presetAlias !== avatar.alias) {
             return { success: false, message: '虚拟人像简称与预置人像 ID 不匹配' };
           }
-        } else if (meta.character.primaryAssetId || meta.character.presetAvatarId) {
-          return { success: false, message: '无人物脚本不能绑定人像素材' };
+          const outfitValidation = validateAvatarOutfitSelection(avatar, meta.character.outfit);
+          if (!outfitValidation.success) {
+            return { success: false, message: outfitValidation.message };
+          }
+          meta.character.outfit = outfitValidation.outfit;
+        } else {
+          if (meta.character.primaryAssetId || meta.character.presetAvatarId) {
+            return { success: false, message: '无人物脚本不能绑定人像素材' };
+          }
+          if (meta.character.outfit) {
+            return { success: false, message: '仅系统内置虚拟人支持预设服装' };
+          }
         }
 
         if (meta.edit) {

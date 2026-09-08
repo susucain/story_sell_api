@@ -13,7 +13,13 @@ import { VideoAsset } from './entities/video-asset.entity';
 import { VideoSession } from './entities/video-session.entity';
 import { VideoMessage } from './entities/video-message.entity';
 import { OssService } from '../oss/oss.service';
-import { isPresetAvatarId, PresetAvatarId } from './preset-avatars';
+import {
+  AvatarOutfitInput,
+  getPresetAvatar,
+  isPresetAvatarId,
+  PresetAvatarId,
+  validateAvatarOutfitSelection,
+} from './avatar-catalog';
 
 interface TaskUpdatePayload {
   taskId: string;
@@ -48,6 +54,8 @@ interface CharacterMeta {
   mode: 'user_portrait' | 'preset_avatar' | 'none';
   primaryAssetId?: number;
   presetAvatarId?: PresetAvatarId;
+  presetAlias?: string;
+  outfit?: AvatarOutfitInput;
 }
 
 const TASK_STATUSES = ['queued', 'running', 'persisting', 'succeeded', 'failed', 'expired', 'cancelled'] as const;
@@ -297,6 +305,16 @@ export class VideoTaskService {
     if (character.mode === 'preset_avatar') {
       if (!character.presetAvatarId || !isPresetAvatarId(character.presetAvatarId)) {
         throw new BadRequestException('脚本绑定的虚拟人像无效');
+      }
+      const avatar = getPresetAvatar(character.presetAvatarId);
+      if (character.presetAlias && character.presetAlias !== avatar.alias) {
+        throw new BadRequestException('脚本绑定的虚拟人像简称无效');
+      }
+      if (character.outfit) {
+        const outfitValidation = validateAvatarOutfitSelection(avatar, character.outfit);
+        if (!outfitValidation.success) {
+          throw new BadRequestException(outfitValidation.message);
+        }
       }
       return `asset://${character.presetAvatarId}`;
     }

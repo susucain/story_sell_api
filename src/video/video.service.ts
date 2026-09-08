@@ -24,6 +24,7 @@ import { VideoToolsService } from './video-tools.service';
 import { VideoTaskService } from './video-task.service';
 import { ProcessTracker } from './process-tracker';
 import { assertAgentFinalReply } from './agent-reply.validation';
+import { getPresetOutfit, PRESET_AVATARS } from './avatar-catalog';
 
 const RECENT_MESSAGE_LIMIT = 6;
 const FALLBACK_USER_ID = 1;
@@ -487,6 +488,13 @@ export class VideoService {
       where: { sessionId: session.sessionId, userId: session.userId },
       order: { updatedAt: 'DESC' },
     });
+    const avatarChoices = PRESET_AVATARS.map((avatar) => {
+      const defaultOutfit = getPresetOutfit(avatar.defaultOutfitId);
+      const allowedOutfits = avatar.allowedOutfitIds
+        .map((outfitId) => getPresetOutfit(outfitId).alias)
+        .join('、');
+      return `${avatar.alias}（${avatar.identityPrompt}；默认服装：${defaultOutfit.alias}；可选服装：${allowedOutfits}）`;
+    }).join('；');
 
     let prompt = `你是映语 AI 达人带货视频工作台。帮助用户为商品生成带货视频分镜脚本，并支持一键生成视频。\n`;
     prompt += `当前会话 ID：${session.sessionId}\n`;
@@ -536,7 +544,7 @@ export class VideoService {
 
     prompt += `\n## 输出约定（必须严格遵守）\n`;
     prompt += `1. 收到请求后先判断修改对象。用户修改已有分镜脚本、重写某镜头或重制未生成视频时，使用脚本重写模式，生成完整新脚本。用户已经拥有一条视频、只要求修改其中某时间段并输出完整修改后视频时，使用完整视频编辑模式：原视频是编辑输入，不得重写整条创作分镜，也不得将修改区间作为输出时长。两种模式都属于脚本创作，必须先调用 start_script_creation；普通问候、单独分析素材、单独更新商品画像、知识问答和已确认脚本的视频生成任务不得调用该工具。\n`;
-    prompt += `2. 每次脚本创作均须在 meta.character 保存主角色。优先级为：用户最新明确角色指令 > 用户明确要求沿用引用脚本角色 > 根据商品画像自动选择 > 无人物。用户说“小叶、程曦、青黛、小岚、瑶琴、云游、凌霜”时，必须绑定对应 preset_avatar 与 presetAlias；用户明确要求使用上传人像时用 user_portrait；未指定但需要人物时根据商品画像自动选 preset_avatar；不需要人物时用 none。用户上传人像但未明确要求其出镜，不得自动绑定。user_portrait 必须填写当前会话图片素材的 primaryAssetId；preset_avatar 必须填写 presetAvatarId 和匹配的 presetAlias。角色设定按需读取 character-prompts.md，写入 roleName 和 rolePrompt。同一脚本不得同时使用上传人像和虚拟人像；遇到同一句中的互斥角色指令必须追问。\n`;
+    prompt += `2. 每次脚本创作均须在 meta.character 保存主角色。优先级为：用户最新明确角色指令 > 用户明确要求沿用引用脚本角色 > 根据商品画像自动选择 > 无人物。可用系统虚拟人只有：${avatarChoices}。用户说出上述别名时，必须绑定对应 preset_avatar、presetAvatarId、presetAlias 和 outfit；未指定服装时使用默认服装，指定服装时只能使用该角色可选服装或兼容的自定义服装。用户要求“小洁”“小丽”“小蓉”等旧角色时，必须调用 request_user_confirmation，要求其从 7 个内置虚拟人中选择；禁止自动映射或保存脚本。用户明确要求使用上传人像时用 user_portrait；未指定但需要人物时根据商品画像自动选 preset_avatar；不需要人物时用 none。用户上传人像但未明确要求其出镜，不得自动绑定。user_portrait 必须填写当前会话图片素材的 primaryAssetId；preset_avatar 必须填写 presetAvatarId 和匹配的 presetAlias。角色设定按需读取 character-prompts.md，写入 roleName 和 rolePrompt。同一脚本不得同时使用上传人像和虚拟人像；遇到同一句中的互斥角色指令必须追问。\n`;
     prompt += `3. 当你准备好结果后，**必须**调用 generate_script 工具保存。脚本重写模式保存完整 storyboard_markdown 和完整 seedance_prompt。完整视频编辑模式保存一个可解析的视频编辑任务 storyboard_markdown，以及基于输入视频的局部编辑 seedance_prompt；该提示词必须写明输出总时长等于原视频完整时长、修改范围、未修改范围严格保持原视频不变和连续性要求。完整视频编辑模式的 meta.edit 必须包含 mode=full_video_edit、sourceAssetId、sourceDurationSec、targetStartSec、targetEndSec、preserveAudio。若素材中缺少原视频时长，先向用户询问，不得猜测。创作完成时不得只在对话中输出提示词，必须先保存脚本。用户确认该脚本后，才能调用 create_video_task 生成视频。工具参数包括：title、storyboard_markdown、seedance_prompt、meta。除非用户明确要求查看已保存脚本的内容或 Seedance 提示词，否则禁止在对话文本中输出完整分镜脚本或 Seedance 提示词。\n`;
     prompt += `3. storyboard_markdown 必须严格遵循 Skill 中的分镜脚本格式，每个镜头使用如下格式（示例）：\n`;
     prompt += `### 镜头 1：福利钩子 (0s - 3s)\n- **画面描述**：手持红色手牌，镜头从手牌快速拉远露出店内环境。\n- **旁白**：今天这家火锅套餐，人均不到五十！\n`;
