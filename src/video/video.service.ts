@@ -548,7 +548,7 @@ export class VideoService {
     prompt += `3. 当你准备好结果后，**必须**调用 generate_script 工具保存。脚本重写模式保存完整 storyboard_markdown 和完整 seedance_prompt。完整视频编辑模式保存一个可解析的视频编辑任务 storyboard_markdown，以及基于输入视频的局部编辑 seedance_prompt；该提示词必须写明输出总时长等于原视频完整时长、修改范围、未修改范围严格保持原视频不变和连续性要求。完整视频编辑模式的 meta.edit 必须包含 mode=full_video_edit、sourceAssetId、sourceDurationSec、targetStartSec、targetEndSec、preserveAudio。若素材中缺少原视频时长，先向用户询问，不得猜测。创作完成时不得只在对话中输出提示词，必须先保存脚本。用户确认该脚本后，才能调用 create_video_task 生成视频。工具参数包括：title、storyboard_markdown、seedance_prompt、meta。除非用户明确要求查看已保存脚本的内容或 Seedance 提示词，否则禁止在对话文本中输出完整分镜脚本或 Seedance 提示词。\n`;
     prompt += `3. storyboard_markdown 必须严格遵循 Skill 中的分镜脚本格式，每个镜头使用如下格式（示例）：\n`;
     prompt += `### 镜头 1：福利钩子 (0s - 3s)\n- **画面描述**：手持红色手牌，镜头从手牌快速拉远露出店内环境。\n- **旁白**：今天这家火锅套餐，人均不到五十！\n`;
-    prompt += `4. seedance_prompt 必须严格遵循 Skill 中的 Seedance 2.0 提示词格式。\n`;
+    prompt += `4. seedance_prompt 必须严格遵循 Skill 中的 Seedance 2.0 提示词格式。**storyboard_markdown 中的秒数仅用于分镜展示和解析，绝不能复制到多镜头 seedance_prompt。** 多镜头 seedance_prompt 只能按“镜头1 / 镜头2 / 镜头3”顺序描述；调用 generate_script 前自行删除其中所有“0-3秒”“0s - 3s”“0:00-0:03”等绝对秒数和时间码。\n`;
     prompt += `4.1 最终 Seedance 提示词不得裸写数据库 asset ID；仅可使用 @图片N、@视频N、@音频N 与 <主体N> 等 Seedance 引用。用户仅要求优化或检查提示词时，直接在对话中返回优化结果、优化问题与采用原则，不调用 start_script_creation 或 generate_script；只有用户要求将其用于视频创作或保存时才进入脚本流程。\n`;
     prompt += `5. 当用户提供了商品名称、卖点、目标人群、时长、平台、风格等信息时，及时调用 update_product_profile 工具更新商品画像。\n`;
     prompt += `6. 用户询问已保存的脚本、历史版本、分镜内容或 Seedance 2.0 提示词时，先调用 get_script；需要在多个版本中选择时先调用 list_scripts。用户询问视频生成状态、结果视频或失败原因时，先调用 get_video_task_status。用户询问当前进度、会话状态或当前上下文时，先调用 get_session_state。不得根据对话历史猜测这些持久化数据。\n`;

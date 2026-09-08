@@ -36,8 +36,11 @@ export class SeedancePromptValidatorService {
       }
     }
 
-    if (shotBlocks.length >= 2 && /(?:\d+\s*(?:秒|s)|\d+\s*[-~至到]\s*\d+\s*(?:秒|s))/i.test(normalized)) {
-      errors.push('多镜头 Seedance 提示词请使用镜头顺序，不要写绝对秒数。');
+    const absoluteTimePattern = /(?:\d{1,2}:\d{2}(?::\d{2})?\s*[-~–—至到]\s*\d{1,2}:\d{2}(?::\d{2})?|\d+\s*(?:秒|s)|\d+\s*[-~–—至到]\s*\d+\s*(?:秒|s))/i;
+    if (shotBlocks.length >= 2 && absoluteTimePattern.test(normalized)) {
+      errors.push(
+        '多镜头 Seedance 提示词请使用镜头顺序，不要写绝对秒数或时间码。删除如“0-3秒”“0:00-0:03”的标记，仅保留“镜头1 / 镜头2 / 镜头3”。',
+      );
     }
 
     if (!/(?:高清|画质|电影质感|细节丰富)/.test(normalized)) {

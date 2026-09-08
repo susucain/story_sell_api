@@ -42,6 +42,12 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.errors).toContainEqual(expect.stringContaining('绝对秒数'));
   });
 
+  it('rejects timestamp ranges in multi-shot prompts', () => {
+    const result = validator.validate('镜头1：0:00-0:03，固定镜头。镜头2：0:03-0:06，跟拍主体。');
+
+    expect(result.errors).toContainEqual(expect.stringContaining('绝对秒数'));
+  });
+
   it('warns when a multi-subject prompt lacks duplicate-character constraints', () => {
     const result = validator.validate(
       '<主体1> 与 <主体2> 在餐桌旁交谈。高清电影质感，画面稳定无变形，不要生成水印，不要生成 Logo。',
