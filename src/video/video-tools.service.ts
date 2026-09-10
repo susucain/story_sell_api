@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { tool, zodSchema } from 'ai';
 import { z } from 'zod/v4';
 import * as fs from 'node:fs/promises';
@@ -212,14 +212,14 @@ export class VideoToolsService {
 
   private buildParseAssetTool(ctx: ToolContext) {
     return tool({
-      description: '解析用户上传的素材（图片/视频），将视觉信息摘要持久化用于跨轮上下文。仅用于 asset_purpose=analysis 的素材，asset_id 取自 system prompt 关联素材区的 # 编号。',
+      description: '解析用户上传的素材（图片/视频），将视觉信息摘要持久化用于跨轮上下文。仅用于 asset_purpose=all 或 analysis 的素材，asset_id 取自 system prompt 关联素材区的 # 编号。',
       inputSchema: zodSchema(z.object({
         asset_id: z.number().describe('素材 ID，来自关联素材区的 # 编号'),
         summary: z.string().describe('素材内容摘要：画面描述、商品卖点、关键视觉特征'),
       })),
       execute: async ({ asset_id, summary }) => {
         await this.assetRepo.update(
-          { id: asset_id, sessionId: ctx.sessionId, assetPurpose: 'analysis' },
+          { id: asset_id, sessionId: ctx.sessionId, assetPurpose: In(['analysis', 'all']) },
           { parsedContent: { summary }, status: 'parsed' },
         );
         return { asset_id, summary, status: 'parsed' };
@@ -656,8 +656,8 @@ export class VideoToolsService {
             } : null,
             assets: {
               total: assets.length,
-              analysis: assets.filter((asset) => asset.assetPurpose === 'analysis').length,
-              reference: assets.filter((asset) => asset.assetPurpose === 'reference').length,
+              analysis: assets.filter((asset) => ['analysis', 'all'].includes(asset.assetPurpose)).length,
+              reference: assets.filter((asset) => ['reference', 'all'].includes(asset.assetPurpose)).length,
             },
             updated_at: this.toISOString(session.updatedAt),
           },

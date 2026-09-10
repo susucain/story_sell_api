@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 
 export type AssetType = 'image' | 'video' | 'url';
-export type AssetPurpose = 'analysis' | 'reference';
+export type AssetPurpose = 'all' | 'analysis' | 'reference';
 export type AssetContentCategory = 'portrait' | 'product' | 'food' | 'store' | 'environment' | 'other';
 
 @Entity('video_assets')
@@ -26,7 +26,7 @@ export class VideoAsset {
   @Column({ name: 'asset_type', length: 32, comment: '素材类型：image / video / url' })
   assetType: AssetType;
 
-  @Column({ name: 'asset_purpose', length: 32, default: 'analysis', comment: '素材用途：analysis / reference' })
+  @Column({ name: 'asset_purpose', length: 32, default: 'all', comment: '素材用途：all / analysis / reference' })
   assetPurpose: AssetPurpose;
 
   @Column({ name: 'content_category', length: 32, nullable: true, comment: '素材内容分类：portrait / product / food / store / environment / other' })

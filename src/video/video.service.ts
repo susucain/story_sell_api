@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, LessThanOrEqual, Repository } from 'typeorm';
+import { Brackets, In, LessThanOrEqual, Repository } from 'typeorm';
 import { context, trace } from '@opentelemetry/api';
 import {
   UIMessage,
@@ -103,7 +103,7 @@ export class VideoService {
                 : mediaType.startsWith('image/')
                   ? 'image'
                   : 'url',
-              asset_purpose: part.purpose === 'reference' ? 'reference' : 'analysis',
+              asset_purpose: 'all',
               name: part.filename ?? '附件素材',
               url: part.url,
               duration_sec: typeof part.durationSec === 'number' ? part.durationSec : undefined,
@@ -158,7 +158,7 @@ export class VideoService {
     });
 
     const analysisAssets = await this.assetRepo.find({
-      where: { sessionId, assetPurpose: 'analysis' },
+      where: { sessionId, assetPurpose: In(['analysis', 'all']) },
       order: { createdAt: 'ASC' },
     });
 
@@ -523,7 +523,7 @@ export class VideoService {
     if (assets.length > 0) {
       prompt += `\n## 关联素材\n`;
       for (const asset of assets) {
-        const summary = asset.assetPurpose === 'analysis'
+        const summary = asset.assetPurpose !== 'reference'
           ? (asset.parsedContent?.summary || '待解析（可调用 parse_asset 解析，asset_id 见 # 编号）')
           : asset.url;
         const duration = asset.assetType === 'video' && typeof asset.parsedContent?.durationSec === 'number'
@@ -650,7 +650,7 @@ export class VideoService {
     session_id: string;
     user_id?: number;
     asset_type: 'image' | 'video' | 'url';
-    asset_purpose: 'analysis' | 'reference';
+    asset_purpose?: 'all' | 'analysis' | 'reference';
     name: string;
     url: string;
     thumbnail_url?: string;
@@ -675,7 +675,7 @@ export class VideoService {
       sessionId: body.session_id,
       userId: session.userId,
       assetType: body.asset_type,
-      assetPurpose: body.asset_purpose,
+      assetPurpose: body.asset_purpose ?? 'all',
       name: body.name,
       url: body.url,
       thumbnailUrl: body.thumbnail_url,
@@ -700,7 +700,7 @@ export class VideoService {
     return { success: true };
   }
 
-  async updateAssetPurpose(assetId: number, assetPurpose: 'analysis' | 'reference') {
+  async updateAssetPurpose(assetId: number, assetPurpose: 'all' | 'analysis' | 'reference') {
     const asset = await this.assetRepo.findOne({ where: { id: assetId } });
     if (!asset) {
       throw new Error(`素材不存在: ${assetId}`);

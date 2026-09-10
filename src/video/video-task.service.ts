@@ -238,8 +238,8 @@ export class VideoTaskService {
         where: { sessionId: script.sessionId, userId: script.userId, url: asset.url },
       });
       if (existing) {
-        if (existing.assetPurpose !== 'reference') {
-          existing.assetPurpose = 'reference';
+        if (existing.assetPurpose === 'analysis') {
+          existing.assetPurpose = 'all';
           existing.status = 'parsed';
           await this.assetRepo.save(existing);
         }
@@ -250,7 +250,7 @@ export class VideoTaskService {
         sessionId: script.sessionId,
         userId: script.userId,
         assetType: asset.type,
-        assetPurpose: 'reference',
+        assetPurpose: 'all',
         name: asset.name || '视频生成参考素材',
         url: asset.url,
         status: 'parsed',
@@ -258,9 +258,9 @@ export class VideoTaskService {
     }
 
     const fullVideoEdit = await this.resolveFullVideoEdit(script);
-    // 查询该会话下 reference 类型素材（达人形象照、环境照片、参考视频等）
+    // 查询该会话下可作为生成参考的素材（达人形象照、环境照片、参考视频等）
     const referenceAssets = await this.assetRepo.find({
-      where: { sessionId: script.sessionId, assetPurpose: 'reference' },
+      where: { sessionId: script.sessionId, assetPurpose: In(['reference', 'all']) },
     });
     const characterImageUrl = await this.resolveCharacterImageUrl(script);
     const primaryAssetId = (script.meta?.character as CharacterMeta | undefined)?.primaryAssetId;

@@ -11,6 +11,7 @@ export type AvatarVisualFamily = 'modern' | 'hanfu';
 
 export type PresetOutfitId =
   | 'modern-store-visit'
+  | 'modern-sexy-store-visit'
   | 'modern-commute'
   | 'modern-casual'
   | 'hanfu-ceremonial'
@@ -73,7 +74,7 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '软萌可爱的年轻女性插画师，创意感强、表达亲和',
     keywords: ['创意', '美术', '文创', '设计', '年轻女性'],
     defaultOutfitId: 'modern-casual',
-    allowedOutfitIds: ['modern-store-visit', 'modern-commute', 'modern-casual'],
+    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-commute', 'modern-casual'],
   },
   {
     id: 'asset-20260720213034-z8rzr',
@@ -85,7 +86,7 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '干练亲和的年轻女性互联网实习生，职场通勤气质',
     keywords: ['科技', '职场', '商务', '互联网', '通勤'],
     defaultOutfitId: 'modern-commute',
-    allowedOutfitIds: ['modern-store-visit', 'modern-commute', 'modern-casual'],
+    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-commute', 'modern-casual'],
   },
   {
     id: 'asset-20260720210605-r4fdc',
@@ -97,7 +98,7 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '温婉清新的女性国风插画师，现代国风气质',
     keywords: ['国风', '文旅', '传统文化', '非遗', '茶文化'],
     defaultOutfitId: 'modern-casual',
-    allowedOutfitIds: ['modern-store-visit', 'modern-commute', 'modern-casual'],
+    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-commute', 'modern-casual'],
   },
   {
     id: 'asset-20260720212016-qfsgq',
@@ -109,7 +110,7 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '自然利落的女性新媒体运营，适合镜头前口播',
     keywords: ['探店', '餐饮', '本地生活', '带货', '口播'],
     defaultOutfitId: 'modern-store-visit',
-    allowedOutfitIds: ['modern-store-visit', 'modern-casual', 'modern-commute'],
+    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-casual', 'modern-commute'],
   },
   {
     id: 'asset-20260804202300-dfnsm',
@@ -157,7 +158,16 @@ export const PRESET_OUTFITS: readonly PresetOutfit[] = [
     allowedAvatarIds: MODERN_AVATAR_IDS,
     sceneTags: ['探店', '餐饮', '本地生活', '口播'],
     prompt:
-      '浅色短袖上衣搭配深色长裤与白色运动鞋，简约配饰，整体自然利落，适合镜头前口播。',
+      '奶油白修身短袖针织上衣，搭配深蓝高腰直筒牛仔裤，裤脚微露脚踝；白色厚底运动鞋，细银色耳钉与小巧腕表，干净利落，适合餐桌边自然口播。',
+  },
+  {
+    id: 'modern-sexy-store-visit',
+    alias: '性感探店装',
+    visualFamilies: ['modern'],
+    allowedAvatarIds: MODERN_AVATAR_IDS,
+    sceneTags: ['精致餐饮', '夜间餐吧', '成熟探店', '口播'],
+    prompt:
+      '黑色一字肩修身针织上衣，露出肩部线条并微露锁骨与少量事业线；搭配高腰黑色铅笔裙与小侧开叉，轻薄黑色半透明丝袜、尖头细高跟鞋和小巧皮质手包，以简洁哑光材质为主，适合夜间餐吧或精致探店场景。',
   },
   {
     id: 'modern-commute',
@@ -165,7 +175,8 @@ export const PRESET_OUTFITS: readonly PresetOutfit[] = [
     visualFamilies: ['modern'],
     allowedAvatarIds: MODERN_AVATAR_IDS,
     sceneTags: ['职场', '科技', '商务', '通勤'],
-    prompt: '简洁衬衫搭配西装裤或半裙，低调配饰与通勤鞋履，专业干练。',
+    prompt:
+      '象牙白垂感衬衫，领口自然微开并露出锁骨与少量事业线，搭配炭灰高腰直筒西装裤；黑色尖头低跟鞋、细金属表与小型耳圈，克制专业。',
   },
   {
     id: 'modern-casual',
@@ -174,7 +185,7 @@ export const PRESET_OUTFITS: readonly PresetOutfit[] = [
     allowedAvatarIds: MODERN_AVATAR_IDS,
     sceneTags: ['文创', '设计', '街头', '文旅'],
     prompt:
-      '舒适针织上衣或简约卫衣搭配长裤或及膝半裙，颜色清爽，适合日常出镜。',
+      '雾粉色贴身短袖针织上衣，胸部线条自然明显，搭配米白及膝 A 字半裙；低饱和棕色玛丽珍鞋、珍珠耳钉，清新文艺。',
   },
   {
     id: 'hanfu-ceremonial',
@@ -182,7 +193,8 @@ export const PRESET_OUTFITS: readonly PresetOutfit[] = [
     visualFamilies: ['hanfu'],
     allowedAvatarIds: ['asset-20260804202300-dfnsm'],
     sceneTags: ['先秦', '历史', '古典文化'],
-    prompt: '层次庄重的先秦风礼服，纹样克制，发饰典雅，符合历史文化场景。',
+    prompt:
+      '玄黑与黛青交叠的大袖深衣，衣襟以暗金云雷纹收边；宽腰封压住层叠下摆，玉质佩饰垂于腰侧，乌发高髻配青铜发簪，庄重克制。',
   },
   {
     id: 'xianxia-traveler',
@@ -190,7 +202,8 @@ export const PRESET_OUTFITS: readonly PresetOutfit[] = [
     visualFamilies: ['hanfu'],
     allowedAvatarIds: ['asset-20260720211601-76nqw'],
     sceneTags: ['仙侠', '玄幻', '奇幻'],
-    prompt: '轻盈飘逸的仙侠长衣与简洁束发，便于行旅和动作，气质清冷自在。',
+    prompt:
+      '雾青色交领长衣外罩半透明浅灰披风，衣摆带轻微风化褶皱；深灰束腰、窄袖护腕与软底长靴，长发半束，清冷利落。',
   },
   {
     id: 'wuxia-heroine',
@@ -198,7 +211,8 @@ export const PRESET_OUTFITS: readonly PresetOutfit[] = [
     visualFamilies: ['hanfu'],
     allowedAvatarIds: ['asset-20260804202404-mzn8z'],
     sceneTags: ['武侠', '江湖', '古风剧情'],
-    prompt: '利落的武侠劲装，长靴或布靴，束发与简洁护腕，便于动作表现。',
+    prompt:
+      '黑色立领短劲装，内搭暗红交领上衣，配深灰高腰裤与窄皮腰封；黑色长靴、简洁护腕，长发高束，英气明确。',
   },
 ] as const;
 

@@ -56,7 +56,7 @@ export class VideoController {
       session_id: string;
       user_id?: number;
       asset_type: 'image' | 'video' | 'url';
-      asset_purpose: 'analysis' | 'reference';
+      asset_purpose?: 'all' | 'analysis' | 'reference';
       name: string;
       url: string;
       thumbnail_url?: string;
@@ -80,10 +80,10 @@ export class VideoController {
   @Patch('assets/:assetId')
   async updateAssetPurpose(
     @Param('assetId') assetId: number,
-    @Body() body: { asset_purpose: 'analysis' | 'reference' },
+    @Body() body: { asset_purpose: 'all' | 'analysis' | 'reference' },
   ) {
-    if (body.asset_purpose !== 'analysis' && body.asset_purpose !== 'reference') {
-      throw new BadRequestException('asset_purpose 必须为 analysis 或 reference');
+    if (!['all', 'analysis', 'reference'].includes(body.asset_purpose)) {
+      throw new BadRequestException('asset_purpose 必须为 all、analysis 或 reference');
     }
     return this.videoService.updateAssetPurpose(assetId, body.asset_purpose);
   }
