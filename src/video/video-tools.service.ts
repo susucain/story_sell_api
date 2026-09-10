@@ -291,7 +291,8 @@ export class VideoToolsService {
           }
         }
 
-        const validation = this.seedancePromptValidator.validate(seedance_prompt);
+        const normalization = this.seedancePromptValidator.normalize(seedance_prompt);
+        const validation = this.seedancePromptValidator.validate(normalization.prompt);
         if (validation.errors.length > 0) {
           return {
             success: false,
@@ -396,7 +397,7 @@ export class VideoToolsService {
           hook: parsed.hook,
           shots: parsed.shots,
           scriptMarkdown: storyboard_markdown,
-          seedancePrompt: seedance_prompt,
+          seedancePrompt: normalization.prompt,
           meta: {
             ...parsed.meta,
             ...meta,
@@ -415,7 +416,7 @@ export class VideoToolsService {
           title: saved.title,
           shot_count: parsed.shots.length,
           message: `脚本 V${saved.version} 已保存。`,
-          warnings: validation.warnings,
+          warnings: [...validation.warnings, ...normalization.changes],
         };
       },
     });

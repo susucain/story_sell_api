@@ -5,12 +5,29 @@ export interface SeedancePromptValidationResult {
   warnings: string[];
 }
 
+export interface SeedancePromptNormalizationResult {
+  prompt: string;
+  changes: string[];
+}
+
 @Injectable()
 export class SeedancePromptValidatorService {
+  normalize(prompt: string): SeedancePromptNormalizationResult {
+    let normalized = this.normalizeLineEndings(prompt);
+    const changes: string[] = [];
+
+    if (!this.hasNoTextConstraint(normalized)) {
+      normalized = `${normalized.trim()}\n\n保持无字幕，避免生成任何文字或字幕。`;
+      changes.push('已补齐无文字画面约束');
+    }
+
+    return { prompt: normalized, changes };
+  }
+
   validate(prompt: string): SeedancePromptValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const normalized = prompt.replace(/\r\n/g, '\n');
+    const normalized = this.normalizeLineEndings(prompt);
 
     if (/\[?asset-[\w-]+\]?/i.test(normalized)) {
       errors.push('Seedance 提示词不能直接使用 asset ID，请改用 @图片N、@视频N 或 @音频N 引用素材。');
@@ -43,6 +60,14 @@ export class SeedancePromptValidatorService {
       );
     }
 
+    if (!this.hasNoTextConstraint(normalized)) {
+      errors.push('Seedance 提示词必须包含“保持无字幕，避免生成任何文字或字幕”约束。');
+    }
+
+    if (this.hasVisualTextInstruction(normalized)) {
+      errors.push('Seedance 提示词不能要求生成画面文字、字幕、标题、标语、手牌文字或按钮，所有文字请在后期添加。');
+    }
+
     if (!/(?:高清|画质|电影质感|细节丰富)/.test(normalized)) {
       warnings.push('建议补充画质约束，例如“高清，细节丰富，电影质感”。');
     }
@@ -59,5 +84,30 @@ export class SeedancePromptValidatorService {
     }
 
     return { errors, warnings };
+  }
+
+  private normalizeLineEndings(prompt: string): string {
+    return prompt.replace(/\r\n/g, '\n');
+  }
+
+  private hasNoTextConstraint(prompt: string): boolean {
+    return /(?:保持|全程|画面)?\s*(?:无字幕|不含字幕|禁止字幕)[，,；;、\s]*(?:避免|禁止|不得)\s*(?:生成|出现|显示)?\s*(?:任何)?\s*(?:文字|字幕)/.test(prompt);
+  }
+
+  private hasVisualTextInstruction(prompt: string): boolean {
+    const visualTextPatterns = [
+      /(?:生成|添加|叠加|手持|举着|写有|写着|悬浮|展示|弹出|出现|预留)[^。；\n]{0,40}(?:字幕|文字|文案|标题|标语|字样|书法字|汉字|按钮|倒计时|文字图层|字幕条|手牌|横幅|竖幅|Logo)/gi,
+      /(?:蓝底白字|白底黑字|红底白字|黄底黑字|文字图层|特效字幕|字幕条|书法字|店铺\s*Logo)/gi,
+    ];
+
+    return visualTextPatterns.some((pattern) =>
+      [...prompt.matchAll(pattern)].some((match) => !this.isNegated(prompt, match.index ?? 0)),
+    );
+  }
+
+  private isNegated(prompt: string, index: number): boolean {
+    return /(?:不|无|禁止|避免|不得|不要)\s*(?:生成|添加|叠加|手持|举着|写有|写着|悬浮|展示|弹出|出现|预留|显示)?\s*$/.test(
+      prompt.slice(Math.max(0, index - 12), index),
+    );
   }
 }

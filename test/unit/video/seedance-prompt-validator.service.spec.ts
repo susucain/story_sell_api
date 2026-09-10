@@ -5,7 +5,7 @@ describe('SeedancePromptValidatorService', () => {
 
   it('accepts a well-formed prompt', () => {
     const result = validator.validate(
-      '参考 @图片1 中的<主体1>（短发女孩），生成她坐在咖啡店窗边吃蛋糕的画面。高清，细节丰富，电影质感；人物面部稳定不变形、动作连贯自然，无穿模无卡顿；不要生成水印，不要生成 Logo。',
+      '参考 @图片1 中的<主体1>（短发女孩），生成她坐在咖啡店窗边吃蛋糕的画面。高清，细节丰富，电影质感；人物面部稳定不变形、动作连贯自然，无穿模无卡顿；保持无字幕，避免生成任何文字或字幕；不要生成水印，不要生成 Logo。',
     );
 
     expect(result.errors).toEqual([]);
@@ -48,9 +48,59 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.errors).toContainEqual(expect.stringContaining('绝对秒数'));
   });
 
+  it('rejects a prompt without the no-text constraint', () => {
+    const result = validator.validate(
+      '生成女孩在咖啡店吃蛋糕的画面。高清，细节丰富，电影质感；人物面部稳定不变形、动作连贯自然，无穿模无卡顿；不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toContainEqual(expect.stringContaining('无字幕'));
+  });
+
+  it('accepts equivalent no-text wording', () => {
+    const result = validator.validate(
+      '生成女孩在咖啡店吃蛋糕的画面。高清，细节丰富，电影质感；人物面部稳定不变形、动作连贯自然，无穿模无卡顿；全程无字幕，禁止生成任何文字或字幕；不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('normalizes a prompt that omits the no-text constraint', () => {
+    const normalized = validator.normalize(
+      '生成女孩在咖啡店吃蛋糕的画面。高清，细节丰富，电影质感；人物面部稳定不变形、动作连贯自然，无穿模无卡顿；不要生成水印，不要生成 Logo。',
+    );
+
+    expect(normalized.changes).toContain('已补齐无文字画面约束');
+    expect(normalized.prompt).toContain('保持无字幕，避免生成任何文字或字幕');
+    expect(validator.validate(normalized.prompt).errors).toEqual([]);
+  });
+
+  it('accepts negative instructions that prohibit visual text', () => {
+    const result = validator.validate(
+      '生成女孩在咖啡店吃蛋糕的画面。高清，细节丰富，电影质感；人物面部稳定不变形、动作连贯自然，无穿模无卡顿；保持无字幕，禁止显示任何文字或字幕；不要生成水印，不要生成店铺 Logo。',
+    );
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('rejects visual text instructions even when the prompt says no subtitles', () => {
+    const result = validator.validate(
+      '保持无字幕，避免生成任何文字或字幕。镜头1：主体举着写有“限时特惠”的红色手牌。高清电影质感，画面稳定无变形，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toContainEqual(expect.stringContaining('画面文字'));
+  });
+
+  it('rejects colored-text banners even when the prompt says no subtitles', () => {
+    const result = validator.validate(
+      '保持无字幕，避免生成任何文字或字幕。镜头1：背景悬挂蓝底白字横幅。高清电影质感，画面稳定无变形，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toContainEqual(expect.stringContaining('画面文字'));
+  });
+
   it('warns when a multi-subject prompt lacks duplicate-character constraints', () => {
     const result = validator.validate(
-      '<主体1> 与 <主体2> 在餐桌旁交谈。高清电影质感，画面稳定无变形，不要生成水印，不要生成 Logo。',
+      '<主体1> 与 <主体2> 在餐桌旁交谈。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
     );
 
     expect(result.errors).toEqual([]);

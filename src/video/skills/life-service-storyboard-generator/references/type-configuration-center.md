@@ -24,14 +24,14 @@
 ```yaml
 type_id: "package_promo"
 narrative_mode: "超值套餐种草模式"
-visual_style: "高饱和度 + 暖色调 + 清晰价格标签"
+visual_style: "高饱和度 + 暖色调 + 强烈食物质感"
 camera_rhythm: "快速切换 (3-5秒/镜)"
 max_shot_duration: 8
 segments:
   - segment_id: "hook"
     duration: 3-5
-    focus: "价格冲击/超级福利"
-    visual: "大字价格贴纸 + 满桌菜品"
+    focus: "超值感/超级福利"
+    visual: "热气腾腾的满桌菜品 + 强烈色彩对比"
   - segment_id: "full_view"
     duration: 5-8
     focus: "套餐全览"
@@ -46,14 +46,14 @@ segments:
     visual: "舒适环境展示"
   - segment_id: "cta"
     duration: 3-5
-    focus: "限时抢购"
-    visual: "行动号召按钮"
+    focus: "行动号召"
+    visual: "人物自然指向画面外的动作"
 ```
 
 **生成逻辑**:
-1. 前3秒必须出现价格/折扣信息
+1. 前3秒必须通过菜品份量、热气和人物惊喜反应表现超值感，不生成价格或文字
 2. 菜品要有"食欲感"（热气、光泽、拉丝）
-3. 强调"原价 vs 现价"的对比
+3. 通过食材丰富度和用餐场景强调性价比
 4. 镜头节奏快，剪辑紧凑
 
 ---
@@ -126,14 +126,14 @@ segments:
 ```yaml
 type_id: "low_price_marketing"
 narrative_mode: "低价悬念秒杀模式"
-visual_style: "高冲击力 + 大字报 + 强对比色"
+visual_style: "高冲击力 + 强对比色 + 快节奏剪辑"
 camera_rhythm: "极快节奏 (2-4秒/镜)"
 max_shot_duration: 5
 segments:
   - segment_id: "hook"
     duration: 3
-    focus: "视觉展示低价手牌/标签"
-    visual: "老板疯了？这桌菜只要个位数？"
+    focus: "视觉冲击与超值感"
+    visual: "沸腾锅底与满桌菜品的快速近景"
   - segment_id: "package"
     duration: 5-8
     focus: "套餐/环境展示"
@@ -141,20 +141,20 @@ segments:
   - segment_id: "comparison"
     duration: 5-8
     focus: "模糊比价"
-    visual: "比隔壁便宜太多"
+    visual: "丰富菜品与多人分享的满足感"
   - segment_id: "urgency"
     duration: 3-5
     focus: "限时紧迫"
-    visual: "仅限前50名"
+    visual: "人物加快收尾动作与快速切镜"
   - segment_id: "cta"
     duration: 3-5
     focus: "强力号召"
-    visual: "点左下角抢券"
+    visual: "人物自然指向画面外并微笑示意"
 ```
 
 **生成逻辑**:
 1. **模糊价格**: 严禁出现具体金额数字
-2. **视觉冲击**: 开场必须展示低价手牌/标签
+2. **视觉冲击**: 开场必须使用菜品蒸汽、人物反应、快速运镜或色彩对比，不生成手牌、标签或文字
 3. **情绪调动**: 惊讶、不可思议、捡漏心理
 4. 镜头节奏极快，甚至鬼畜剪辑
 
