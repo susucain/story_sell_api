@@ -9,6 +9,7 @@ import {
 const USERS_TABLE = 'users';
 const OSS_FILES_TABLE = 'oss_files';
 const AUTH_SESSIONS_TABLE = 'auth_sessions';
+const OWNERSHIP_MARKER = 'Added by authentication migration 202609120001';
 
 const ACCOUNT_INDEX = new TableIndex({
   name: 'IDX_users_account',
@@ -26,11 +27,145 @@ const OSS_FILES_USER_INDEX = new TableIndex({
   columnNames: ['user_id'],
 });
 
+type ExpectedColumn = {
+  name: string;
+  type: string;
+  length?: string;
+  isNullable: boolean;
+  isPrimary?: boolean;
+  default?: string;
+  onUpdate?: string;
+};
+
+function hasExpectedIndex(table: Table, expectedIndex: TableIndex): boolean {
+  return table.indices.some(
+    (index) =>
+      index.name === expectedIndex.name &&
+      index.isUnique === expectedIndex.isUnique &&
+      index.columnNames.length === expectedIndex.columnNames.length &&
+      index.columnNames.every(
+        (columnName, indexPosition) =>
+          columnName === expectedIndex.columnNames[indexPosition],
+      ),
+  );
+}
+
+function hasUnexpectedIndexForColumn(
+  table: Table,
+  columnName: string,
+  expectedIndex?: TableIndex,
+): boolean {
+  return table.indices.some(
+    (index) =>
+      index.columnNames.includes(columnName) &&
+      (!expectedIndex ||
+        index.name !== expectedIndex.name ||
+        index.isUnique !== expectedIndex.isUnique ||
+        index.columnNames.length !== expectedIndex.columnNames.length ||
+        index.columnNames.some(
+          (indexedColumn, indexPosition) =>
+            indexedColumn !== expectedIndex.columnNames[indexPosition],
+        )),
+  );
+}
+
+function normalizeExpression(expression: unknown): string | undefined {
+  if (expression === undefined) {
+    return undefined;
+  }
+
+  return String(expression)
+    .replace(/[`()'"]/g, '')
+    .toUpperCase();
+}
+
+function matchesExpectedColumn(
+  column: TableColumn,
+  expectedColumn: ExpectedColumn,
+): boolean {
+  return (
+    column.type === expectedColumn.type &&
+    column.length === (expectedColumn.length ?? '') &&
+    column.isNullable === expectedColumn.isNullable &&
+    column.isPrimary === (expectedColumn.isPrimary ?? false) &&
+    normalizeExpression(column.default) ===
+      normalizeExpression(expectedColumn.default) &&
+    normalizeExpression(column.onUpdate) ===
+      normalizeExpression(expectedColumn.onUpdate)
+  );
+}
+
+function isOwnedColumn(table: Table, expectedColumn: ExpectedColumn): boolean {
+  const column = table.findColumnByName(expectedColumn.name);
+
+  return (
+    column !== undefined &&
+    column.comment === OWNERSHIP_MARKER &&
+    matchesExpectedColumn(column, expectedColumn)
+  );
+}
+
+function isOwnedAuthSessionsTable(table: Table): boolean {
+  const expectedColumns: ExpectedColumn[] = [
+    {
+      name: 'id',
+      type: 'varchar',
+      length: '36',
+      isNullable: false,
+      isPrimary: true,
+    },
+    { name: 'user_id', type: 'int', isNullable: false },
+    {
+      name: 'refresh_token_hash',
+      type: 'varchar',
+      length: '255',
+      isNullable: false,
+    },
+    { name: 'expires_at', type: 'datetime', isNullable: false },
+    { name: 'revoked_at', type: 'datetime', isNullable: true },
+    { name: 'last_used_at', type: 'datetime', isNullable: true },
+    {
+      name: 'created_at',
+      type: 'timestamp',
+      isNullable: false,
+      default: 'CURRENT_TIMESTAMP',
+    },
+    {
+      name: 'updated_at',
+      type: 'timestamp',
+      isNullable: false,
+      default: 'CURRENT_TIMESTAMP',
+      onUpdate: 'CURRENT_TIMESTAMP',
+    },
+  ];
+
+  return (
+    table.comment === OWNERSHIP_MARKER &&
+    table.columns.length === expectedColumns.length &&
+    expectedColumns.every((column) => {
+      const existingColumn = table.findColumnByName(column.name);
+      return (
+        existingColumn !== undefined &&
+        matchesExpectedColumn(existingColumn, column)
+      );
+    }) &&
+    table.indices.length === 1 &&
+    hasExpectedIndex(table, AUTH_SESSIONS_USER_INDEX)
+  );
+}
+
+/**
+ * TypeORM does not persist ownership for individually-created schema objects.
+ * The migration marks only objects it creates, so unmarked legacy schema is
+ * never deleted. If the marker or expected schema is manually altered, down()
+ * conservatively leaves the object in place rather than deleting it.
+ */
 export class AddAuthentication202609120001 implements MigrationInterface {
   name = 'AddAuthentication202609120001';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable(USERS_TABLE)) {
+      let createdAccountColumn = false;
       if (!(await queryRunner.hasColumn(USERS_TABLE, 'account'))) {
         await queryRunner.addColumn(
           USERS_TABLE,
@@ -39,8 +174,10 @@ export class AddAuthentication202609120001 implements MigrationInterface {
             type: 'varchar',
             length: '64',
             isNullable: true,
+            comment: OWNERSHIP_MARKER,
           }),
         );
+        createdAccountColumn = true;
       }
 
       if (!(await queryRunner.hasColumn(USERS_TABLE, 'password_hash'))) {
@@ -51,6 +188,7 @@ export class AddAuthentication202609120001 implements MigrationInterface {
             type: 'varchar',
             length: '255',
             isNullable: true,
+            comment: OWNERSHIP_MARKER,
           }),
         );
       }
@@ -63,17 +201,21 @@ export class AddAuthentication202609120001 implements MigrationInterface {
             type: 'int',
             isNullable: false,
             default: '0',
+            comment: OWNERSHIP_MARKER,
           }),
         );
       }
 
-      await queryRunner.createIndex(USERS_TABLE, ACCOUNT_INDEX);
+      if (createdAccountColumn) {
+        await queryRunner.createIndex(USERS_TABLE, ACCOUNT_INDEX);
+      }
     }
 
     if (!(await queryRunner.hasTable(AUTH_SESSIONS_TABLE))) {
       await queryRunner.createTable(
         new Table({
           name: AUTH_SESSIONS_TABLE,
+          comment: OWNERSHIP_MARKER,
           columns: [
             {
               name: 'id',
@@ -125,6 +267,7 @@ export class AddAuthentication202609120001 implements MigrationInterface {
     }
 
     if (await queryRunner.hasTable(OSS_FILES_TABLE)) {
+      let createdUserIdColumn = false;
       if (!(await queryRunner.hasColumn(OSS_FILES_TABLE, 'user_id'))) {
         await queryRunner.addColumn(
           OSS_FILES_TABLE,
@@ -132,38 +275,85 @@ export class AddAuthentication202609120001 implements MigrationInterface {
             name: 'user_id',
             type: 'int',
             isNullable: true,
+            comment: OWNERSHIP_MARKER,
           }),
         );
+        createdUserIdColumn = true;
       }
 
-      await queryRunner.createIndex(OSS_FILES_TABLE, OSS_FILES_USER_INDEX);
+      if (createdUserIdColumn) {
+        await queryRunner.createIndex(OSS_FILES_TABLE, OSS_FILES_USER_INDEX);
+      }
     }
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
+    const ossFilesTable = await queryRunner.getTable(OSS_FILES_TABLE);
     if (
-      (await queryRunner.hasTable(OSS_FILES_TABLE)) &&
-      (await queryRunner.hasColumn(OSS_FILES_TABLE, 'user_id'))
+      ossFilesTable &&
+      isOwnedColumn(ossFilesTable, {
+        name: 'user_id',
+        type: 'int',
+        isNullable: true,
+      }) &&
+      !hasUnexpectedIndexForColumn(
+        ossFilesTable,
+        'user_id',
+        OSS_FILES_USER_INDEX,
+      )
     ) {
-      await queryRunner.dropIndex(OSS_FILES_TABLE, OSS_FILES_USER_INDEX.name!);
+      if (hasExpectedIndex(ossFilesTable, OSS_FILES_USER_INDEX)) {
+        await queryRunner.dropIndex(
+          OSS_FILES_TABLE,
+          OSS_FILES_USER_INDEX.name!,
+        );
+      }
       await queryRunner.dropColumn(OSS_FILES_TABLE, 'user_id');
     }
 
-    if (await queryRunner.hasTable(AUTH_SESSIONS_TABLE)) {
+    const authSessionsTable = await queryRunner.getTable(AUTH_SESSIONS_TABLE);
+    if (authSessionsTable && isOwnedAuthSessionsTable(authSessionsTable)) {
       await queryRunner.dropTable(AUTH_SESSIONS_TABLE);
     }
 
-    if (await queryRunner.hasTable(USERS_TABLE)) {
-      if (await queryRunner.hasColumn(USERS_TABLE, 'account')) {
-        await queryRunner.dropIndex(USERS_TABLE, ACCOUNT_INDEX.name!);
+    const usersTable = await queryRunner.getTable(USERS_TABLE);
+    if (usersTable) {
+      if (
+        isOwnedColumn(usersTable, {
+          name: 'account',
+          type: 'varchar',
+          length: '64',
+          isNullable: true,
+        }) &&
+        !hasUnexpectedIndexForColumn(usersTable, 'account', ACCOUNT_INDEX)
+      ) {
+        if (hasExpectedIndex(usersTable, ACCOUNT_INDEX)) {
+          await queryRunner.dropIndex(USERS_TABLE, ACCOUNT_INDEX.name!);
+        }
         await queryRunner.dropColumn(USERS_TABLE, 'account');
       }
 
-      if (await queryRunner.hasColumn(USERS_TABLE, 'password_hash')) {
+      if (
+        isOwnedColumn(usersTable, {
+          name: 'password_hash',
+          type: 'varchar',
+          length: '255',
+          isNullable: true,
+        }) &&
+        !hasUnexpectedIndexForColumn(usersTable, 'password_hash')
+      ) {
         await queryRunner.dropColumn(USERS_TABLE, 'password_hash');
       }
 
-      if (await queryRunner.hasColumn(USERS_TABLE, 'token_version')) {
+      if (
+        isOwnedColumn(usersTable, {
+          name: 'token_version',
+          type: 'int',
+          isNullable: false,
+          default: '0',
+        }) &&
+        !hasUnexpectedIndexForColumn(usersTable, 'token_version')
+      ) {
         await queryRunner.dropColumn(USERS_TABLE, 'token_version');
       }
     }
