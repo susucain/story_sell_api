@@ -41,6 +41,53 @@ describe('UsersService authentication lookups', () => {
       where: { id: 42 },
     });
   });
+
+  it('creates users through the repository', async () => {
+    const service = new UsersService(userRepository as never);
+    const createUserDto = { name: 'New user', email: 'new@example.com' };
+
+    await service.create(createUserDto);
+
+    expect(userRepository.save).toHaveBeenCalledWith(createUserDto);
+  });
+
+  it('finds all users through the repository', async () => {
+    const service = new UsersService(userRepository as never);
+
+    await service.findAll();
+
+    expect(userRepository.find).toHaveBeenCalledWith();
+  });
+
+  it('finds one user by id through the repository', async () => {
+    const service = new UsersService(userRepository as never);
+
+    await service.findOne(7);
+
+    expect(userRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 7 },
+    });
+  });
+
+  it('updates users through the repository', async () => {
+    const service = new UsersService(userRepository as never);
+    const updateUserDto = {
+      name: 'Updated user',
+      email: 'updated@example.com',
+    };
+
+    await service.update(7, updateUserDto);
+
+    expect(userRepository.update).toHaveBeenCalledWith(7, updateUserDto);
+  });
+
+  it('removes users through the repository', async () => {
+    const service = new UsersService(userRepository as never);
+
+    await service.remove(7);
+
+    expect(userRepository.delete).toHaveBeenCalledWith(7);
+  });
 });
 
 describe('seedDevelopmentAccount', () => {
@@ -96,14 +143,13 @@ describe('seedDevelopmentAccount', () => {
     expect(dataSourceFactory).not.toHaveBeenCalled();
   });
 
-  it('creates the development account at id 1 with a password hash', async () => {
+  it('creates the default development account at id 1 with a password hash', async () => {
     const { dataSource, dataSourceFactory, hashPassword, userRepository } =
       createDependencies();
 
     const result = await getSeedDevelopmentAccount()({
       dataSourceFactory,
       env: {
-        DEV_ACCOUNT: 'dev',
         DEV_ACCOUNT_PASSWORD: plaintextPassword,
         SEED_DEV_ACCOUNT: 'true',
       },
@@ -119,6 +165,30 @@ describe('seedDevelopmentAccount', () => {
     expect(userRepository.insert.mock.calls[0][0].passwordHash).not.toBe(
       plaintextPassword,
     );
+    expect(result).toEqual({ created: true, id: 1 });
+    expect(dataSource.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows an explicitly enabled seed in production', async () => {
+    const { dataSource, dataSourceFactory, hashPassword, userRepository } =
+      createDependencies();
+
+    const result = await getSeedDevelopmentAccount()({
+      dataSourceFactory,
+      env: {
+        DEV_ACCOUNT: 'production-dev',
+        DEV_ACCOUNT_PASSWORD: plaintextPassword,
+        NODE_ENV: 'production',
+        SEED_DEV_ACCOUNT: 'true',
+      },
+      hashPassword,
+    });
+
+    expect(userRepository.insert).toHaveBeenCalledWith({
+      account: 'production-dev',
+      id: 1,
+      passwordHash: 'bcrypt-password-hash',
+    });
     expect(result).toEqual({ created: true, id: 1 });
     expect(dataSource.destroy).toHaveBeenCalledTimes(1);
   });
