@@ -93,13 +93,13 @@ treated as replay: revoke all user sessions and increment `token_version`.
 ### Development Account
 
 Provide an idempotent seed command that only runs when
-`NODE_ENV=development` or `SEED_DEV_ACCOUNT=true`. It creates user `1` if missing,
+`NODE_ENV=development` and `SEED_DEV_ACCOUNT=true`. It creates user `1` if missing,
 or backfills its credentials if present.
 
 - Default account name: `dev` (overridable with `DEV_ACCOUNT`).
 - Password comes only from `DEV_ACCOUNT_PASSWORD`; the command fails if unset.
-- The production deployment does not run this command and does not contain a default
-  development credential.
+- The command rejects every non-development environment. Production does not contain a
+  default development credential.
 
 ## API Contract
 
