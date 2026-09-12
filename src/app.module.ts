@@ -27,6 +27,8 @@ import { VideoMessage } from './video/entities/video-message.entity';
 import { VideoAsset } from './video/entities/video-asset.entity';
 import { VideoScript } from './video/entities/video-script.entity';
 import { LangfuseModule } from './langfuse/langfuse.module';
+import { AuthModule } from './auth/auth.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -36,6 +38,13 @@ import { LangfuseModule } from './langfuse/langfuse.module';
       rootPath: join(__dirname, '..', 'public'),
     }),
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      {
+        limit: 100,
+        name: 'default',
+        ttl: 60_000,
+      },
+    ]),
     BookModule,
     AiModule,
     // 依赖configService，需异步配置
@@ -110,6 +119,7 @@ import { LangfuseModule } from './langfuse/langfuse.module';
     SpeechModule,
     OssModule,
     VideoModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

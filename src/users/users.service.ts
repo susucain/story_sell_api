@@ -32,6 +32,14 @@ export class UsersService {
         return this.usersRepository.findOne({ where: { id } });
     }
 
+    incrementTokenVersion(id: number) {
+        return this.usersRepository.increment({ id }, 'tokenVersion', 1);
+    }
+
+    recordLogin(id: number, lastLoginAt: Date) {
+        return this.usersRepository.update(id, { lastLoginAt });
+    }
+
     update(id: number, updateUserDto: UpdateUserDto) {
         return this.usersRepository.update(id, updateUserDto);
     }
