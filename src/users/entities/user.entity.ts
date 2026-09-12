@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
+@Index('IDX_users_account', ['account'], { unique: true })
 @Entity('users')
 export class User {
     @PrimaryGeneratedColumn()
@@ -17,7 +18,7 @@ export class User {
     })
     email: string;
 
-    @Column({ length: 64, nullable: true, unique: true })
+    @Column({ length: 64, nullable: true })
     account: string;
 
     @Column({ name: 'password_hash', length: 255, nullable: true })
