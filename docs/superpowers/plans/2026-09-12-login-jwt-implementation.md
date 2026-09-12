@@ -188,8 +188,8 @@
   The executable:
 
   ```ts
-  if (process.env.NODE_ENV !== 'development' || process.env.SEED_DEV_ACCOUNT !== 'true') {
-    throw new Error('开发账号只能在 development 环境通过 SEED_DEV_ACCOUNT=true 创建');
+  if (process.env.SEED_DEV_ACCOUNT !== 'true') {
+    throw new Error('开发账号只能通过显式 SEED_DEV_ACCOUNT=true 创建');
   }
   ```
 
