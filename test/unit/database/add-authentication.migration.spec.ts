@@ -1,4 +1,4 @@
-import { Table, TableColumn, TableIndex } from 'typeorm';
+import { Table, TableColumn, TableForeignKey, TableIndex } from 'typeorm';
 import { AddAuthentication202609120001 } from '../../../src/database/migrations/202609120001-add-authentication';
 
 type QueryRunnerCall = {
@@ -444,5 +444,74 @@ describe('AddAuthentication202609120001', () => {
     await expect(queryRunner.hasColumn('oss_files', 'user_id')).resolves.toBe(
       true,
     );
+  });
+
+  it('fails clearly when a required index name has a different definition', async () => {
+    const queryRunner = new MigrationQueryRunner([
+      new Table({
+        name: 'users',
+        columns: [
+          { name: 'id', type: 'int', isPrimary: true },
+          {
+            name: 'account',
+            type: 'varchar',
+            length: '64',
+            isNullable: true,
+          },
+          {
+            name: 'password_hash',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
+          {
+            name: 'token_version',
+            type: 'int',
+            default: '0',
+            isNullable: false,
+          },
+        ],
+        indices: [
+          {
+            name: 'IDX_users_account',
+            columnNames: ['account'],
+            isUnique: false,
+          },
+        ],
+      }),
+    ]);
+
+    await expect(
+      new AddAuthentication202609120001().up(queryRunner as never),
+    ).rejects.toThrow(
+      'Cannot create required index "IDX_users_account" on table "users"',
+    );
+  });
+
+  it('preserves an owned auth_sessions table with a later foreign key', async () => {
+    const queryRunner = new MigrationQueryRunner();
+    const migration = new AddAuthentication202609120001();
+
+    await migration.up(queryRunner as never);
+    const authSessionsTable = await queryRunner.getTable('auth_sessions');
+    authSessionsTable?.foreignKeys.push(
+      new TableForeignKey({
+        name: 'FK_auth_sessions_user',
+        columnNames: ['user_id'],
+        referencedTableName: 'users',
+        referencedColumnNames: ['id'],
+      }),
+    );
+    queryRunner.calls.splice(0);
+
+    await migration.down(queryRunner as never);
+
+    expect(
+      queryRunner.calls.some(
+        (call) =>
+          call.method === 'dropTable' && call.args[0] === 'auth_sessions',
+      ),
+    ).toBe(false);
+    await expect(queryRunner.hasTable('auth_sessions')).resolves.toBe(true);
   });
 });

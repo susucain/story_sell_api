@@ -68,7 +68,7 @@ import { LangfuseModule } from './langfuse/langfuse.module';
         database: configService.get<string>('DB_NAME'),
         connectorPackage: 'mysql2',
         entities: [User, Job, OssFile, VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript],
-        synchronize: false,
+        synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true',
         migrations: [join(__dirname, 'database/migrations/*{.js,.ts}')],
         migrationsRun: configService.get<string>('RUN_MIGRATIONS') === 'true',
         logging: true,

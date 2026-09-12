@@ -37,17 +37,46 @@ type ExpectedColumn = {
   onUpdate?: string;
 };
 
-function hasExpectedIndex(table: Table, expectedIndex: TableIndex): boolean {
-  return table.indices.some(
-    (index) =>
-      index.name === expectedIndex.name &&
-      index.isUnique === expectedIndex.isUnique &&
-      index.columnNames.length === expectedIndex.columnNames.length &&
-      index.columnNames.every(
-        (columnName, indexPosition) =>
-          columnName === expectedIndex.columnNames[indexPosition],
-      ),
+function matchesExpectedIndex(
+  index: TableIndex,
+  expectedIndex: TableIndex,
+): boolean {
+  return (
+    index.name === expectedIndex.name &&
+    index.isUnique === expectedIndex.isUnique &&
+    index.columnNames.length === expectedIndex.columnNames.length &&
+    index.columnNames.every(
+      (columnName, indexPosition) =>
+        columnName === expectedIndex.columnNames[indexPosition],
+    )
   );
+}
+
+function hasExpectedIndex(table: Table, expectedIndex: TableIndex): boolean {
+  return table.indices.some((index) =>
+    matchesExpectedIndex(index, expectedIndex),
+  );
+}
+
+async function ensureExpectedIndex(
+  queryRunner: QueryRunner,
+  table: Table,
+  expectedIndex: TableIndex,
+): Promise<void> {
+  if (hasExpectedIndex(table, expectedIndex)) {
+    return;
+  }
+
+  const conflictingIndex = table.indices.find(
+    (index) => index.name === expectedIndex.name,
+  );
+  if (conflictingIndex) {
+    throw new Error(
+      `Cannot create required index "${expectedIndex.name}" on table "${table.name}" because an index with that name has a different definition. Rename or drop the conflicting index, then rerun this migration.`,
+    );
+  }
+
+  await queryRunner.createIndex(table.name, expectedIndex);
 }
 
 function hasUnexpectedIndexForColumn(
@@ -150,7 +179,11 @@ function isOwnedAuthSessionsTable(table: Table): boolean {
       );
     }) &&
     table.indices.length === 1 &&
-    hasExpectedIndex(table, AUTH_SESSIONS_USER_INDEX)
+    hasExpectedIndex(table, AUTH_SESSIONS_USER_INDEX) &&
+    table.foreignKeys.length === 0 &&
+    table.uniques.length === 0 &&
+    table.checks.length === 0 &&
+    table.exclusions.length === 0
   );
 }
 
@@ -205,8 +238,8 @@ export class AddAuthentication202609120001 implements MigrationInterface {
       }
 
       const usersTable = await queryRunner.getTable(USERS_TABLE);
-      if (usersTable && !hasExpectedIndex(usersTable, ACCOUNT_INDEX)) {
-        await queryRunner.createIndex(USERS_TABLE, ACCOUNT_INDEX);
+      if (usersTable) {
+        await ensureExpectedIndex(queryRunner, usersTable, ACCOUNT_INDEX);
       }
     }
 
@@ -263,12 +296,10 @@ export class AddAuthentication202609120001 implements MigrationInterface {
       authSessionsTable = await queryRunner.getTable(AUTH_SESSIONS_TABLE);
     }
 
-    if (
-      authSessionsTable &&
-      !hasExpectedIndex(authSessionsTable, AUTH_SESSIONS_USER_INDEX)
-    ) {
-      await queryRunner.createIndex(
-        AUTH_SESSIONS_TABLE,
+    if (authSessionsTable) {
+      await ensureExpectedIndex(
+        queryRunner,
+        authSessionsTable,
         AUTH_SESSIONS_USER_INDEX,
       );
     }
@@ -287,11 +318,12 @@ export class AddAuthentication202609120001 implements MigrationInterface {
       }
 
       const ossFilesTable = await queryRunner.getTable(OSS_FILES_TABLE);
-      if (
-        ossFilesTable &&
-        !hasExpectedIndex(ossFilesTable, OSS_FILES_USER_INDEX)
-      ) {
-        await queryRunner.createIndex(OSS_FILES_TABLE, OSS_FILES_USER_INDEX);
+      if (ossFilesTable) {
+        await ensureExpectedIndex(
+          queryRunner,
+          ossFilesTable,
+          OSS_FILES_USER_INDEX,
+        );
       }
     }
   }

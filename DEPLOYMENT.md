@@ -84,6 +84,22 @@ Redis data is stored at:
 Redis is an application dependency and is started by the production Compose
 file without publishing port 6379 to the public host.
 
+## First database rollout
+
+For a newly created, empty MySQL database, bootstrap the schema once before
+running migrations:
+
+1. Set `DB_SYNCHRONIZE=true` and `RUN_MIGRATIONS=false` in
+   `/etc/secrets/env.prod`.
+2. Deploy or start the backend and wait for the health check to pass.
+3. Stop the backend, then set `DB_SYNCHRONIZE=false` and
+   `RUN_MIGRATIONS=true`.
+4. Start or deploy the backend again so TypeORM records and applies
+   migrations.
+
+`DB_SYNCHRONIZE` must remain `false` after this one-time empty-database
+bootstrap. Do not enable it for an existing database.
+
 ## Langfuse
 
 The application can export tracing to an external Langfuse deployment by
