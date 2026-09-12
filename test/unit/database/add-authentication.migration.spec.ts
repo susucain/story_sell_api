@@ -355,4 +355,94 @@ describe('AddAuthentication202609120001', () => {
       true,
     );
   });
+
+  it('adds missing indexes to pre-existing authentication schema', async () => {
+    const queryRunner = new MigrationQueryRunner([
+      new Table({
+        name: 'users',
+        columns: [
+          { name: 'id', type: 'int', isPrimary: true },
+          {
+            name: 'account',
+            type: 'varchar',
+            length: '64',
+            isNullable: true,
+          },
+          {
+            name: 'password_hash',
+            type: 'varchar',
+            length: '255',
+            isNullable: true,
+          },
+          {
+            name: 'token_version',
+            type: 'int',
+            default: '0',
+            isNullable: false,
+          },
+        ],
+      }),
+      new Table({
+        name: 'oss_files',
+        columns: [
+          { name: 'id', type: 'int', isPrimary: true },
+          { name: 'user_id', type: 'int', isNullable: true },
+        ],
+      }),
+      new Table({
+        name: 'auth_sessions',
+        columns: [
+          {
+            name: 'id',
+            type: 'varchar',
+            length: '36',
+            isPrimary: true,
+          },
+          { name: 'user_id', type: 'int' },
+        ],
+      }),
+    ]);
+    const migration = new AddAuthentication202609120001();
+
+    await migration.up(queryRunner as never);
+
+    expect(
+      queryRunner.calls
+        .filter((call) => call.method === 'createIndex')
+        .map((call) => call.args as [string, TableIndex]),
+    ).toEqual([
+      [
+        'users',
+        expect.objectContaining({
+          name: 'IDX_users_account',
+          columnNames: ['account'],
+          isUnique: true,
+        }),
+      ],
+      [
+        'auth_sessions',
+        expect.objectContaining({
+          name: 'IDX_auth_sessions_user_id',
+          columnNames: ['user_id'],
+        }),
+      ],
+      [
+        'oss_files',
+        expect.objectContaining({
+          name: 'IDX_oss_files_user_id',
+          columnNames: ['user_id'],
+        }),
+      ],
+    ]);
+
+    queryRunner.calls.splice(0);
+    await migration.down(queryRunner as never);
+
+    expect(queryRunner.calls).toEqual([]);
+    await expect(queryRunner.hasTable('auth_sessions')).resolves.toBe(true);
+    await expect(queryRunner.hasColumn('users', 'account')).resolves.toBe(true);
+    await expect(queryRunner.hasColumn('oss_files', 'user_id')).resolves.toBe(
+      true,
+    );
+  });
 });

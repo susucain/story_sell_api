@@ -157,15 +157,14 @@ function isOwnedAuthSessionsTable(table: Table): boolean {
 /**
  * TypeORM does not persist ownership for individually-created schema objects.
  * The migration marks only objects it creates, so unmarked legacy schema is
- * never deleted. If the marker or expected schema is manually altered, down()
- * conservatively leaves the object in place rather than deleting it.
+ * never deleted. Indexes added to unmarked legacy resources are retained on
+ * down(), and any altered marker or expected schema is left in place.
  */
 export class AddAuthentication202609120001 implements MigrationInterface {
   name = 'AddAuthentication202609120001';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable(USERS_TABLE)) {
-      let createdAccountColumn = false;
       if (!(await queryRunner.hasColumn(USERS_TABLE, 'account'))) {
         await queryRunner.addColumn(
           USERS_TABLE,
@@ -177,7 +176,6 @@ export class AddAuthentication202609120001 implements MigrationInterface {
             comment: OWNERSHIP_MARKER,
           }),
         );
-        createdAccountColumn = true;
       }
 
       if (!(await queryRunner.hasColumn(USERS_TABLE, 'password_hash'))) {
@@ -206,12 +204,14 @@ export class AddAuthentication202609120001 implements MigrationInterface {
         );
       }
 
-      if (createdAccountColumn) {
+      const usersTable = await queryRunner.getTable(USERS_TABLE);
+      if (usersTable && !hasExpectedIndex(usersTable, ACCOUNT_INDEX)) {
         await queryRunner.createIndex(USERS_TABLE, ACCOUNT_INDEX);
       }
     }
 
-    if (!(await queryRunner.hasTable(AUTH_SESSIONS_TABLE))) {
+    let authSessionsTable = await queryRunner.getTable(AUTH_SESSIONS_TABLE);
+    if (!authSessionsTable) {
       await queryRunner.createTable(
         new Table({
           name: AUTH_SESSIONS_TABLE,
@@ -260,6 +260,13 @@ export class AddAuthentication202609120001 implements MigrationInterface {
           ],
         }),
       );
+      authSessionsTable = await queryRunner.getTable(AUTH_SESSIONS_TABLE);
+    }
+
+    if (
+      authSessionsTable &&
+      !hasExpectedIndex(authSessionsTable, AUTH_SESSIONS_USER_INDEX)
+    ) {
       await queryRunner.createIndex(
         AUTH_SESSIONS_TABLE,
         AUTH_SESSIONS_USER_INDEX,
@@ -267,7 +274,6 @@ export class AddAuthentication202609120001 implements MigrationInterface {
     }
 
     if (await queryRunner.hasTable(OSS_FILES_TABLE)) {
-      let createdUserIdColumn = false;
       if (!(await queryRunner.hasColumn(OSS_FILES_TABLE, 'user_id'))) {
         await queryRunner.addColumn(
           OSS_FILES_TABLE,
@@ -278,10 +284,13 @@ export class AddAuthentication202609120001 implements MigrationInterface {
             comment: OWNERSHIP_MARKER,
           }),
         );
-        createdUserIdColumn = true;
       }
 
-      if (createdUserIdColumn) {
+      const ossFilesTable = await queryRunner.getTable(OSS_FILES_TABLE);
+      if (
+        ossFilesTable &&
+        !hasExpectedIndex(ossFilesTable, OSS_FILES_USER_INDEX)
+      ) {
         await queryRunner.createIndex(OSS_FILES_TABLE, OSS_FILES_USER_INDEX);
       }
     }
