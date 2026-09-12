@@ -488,6 +488,36 @@ describe('AddAuthentication202609120001', () => {
     );
   });
 
+  it('fails clearly when a required index name differs only by case', async () => {
+    const queryRunner = new MigrationQueryRunner([
+      new Table({
+        name: 'users',
+        columns: [
+          { name: 'id', type: 'int', isPrimary: true },
+          {
+            name: 'account',
+            type: 'varchar',
+            length: '64',
+            isNullable: true,
+          },
+        ],
+        indices: [
+          {
+            name: 'idx_users_account',
+            columnNames: ['account'],
+            isUnique: false,
+          },
+        ],
+      }),
+    ]);
+
+    await expect(
+      new AddAuthentication202609120001().up(queryRunner as never),
+    ).rejects.toThrow(
+      'Cannot create required index "IDX_users_account" on table "users"',
+    );
+  });
+
   it('preserves an owned auth_sessions table with a later foreign key', async () => {
     const queryRunner = new MigrationQueryRunner();
     const migration = new AddAuthentication202609120001();

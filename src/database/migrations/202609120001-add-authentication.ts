@@ -37,12 +37,16 @@ type ExpectedColumn = {
   onUpdate?: string;
 };
 
+function normalizeIndexName(indexName: string | undefined): string {
+  return indexName?.toLowerCase() ?? '';
+}
+
 function matchesExpectedIndex(
   index: TableIndex,
   expectedIndex: TableIndex,
 ): boolean {
   return (
-    index.name === expectedIndex.name &&
+    normalizeIndexName(index.name) === normalizeIndexName(expectedIndex.name) &&
     index.isUnique === expectedIndex.isUnique &&
     index.columnNames.length === expectedIndex.columnNames.length &&
     index.columnNames.every(
@@ -68,7 +72,8 @@ async function ensureExpectedIndex(
   }
 
   const conflictingIndex = table.indices.find(
-    (index) => index.name === expectedIndex.name,
+    (index) =>
+      normalizeIndexName(index.name) === normalizeIndexName(expectedIndex.name),
   );
   if (conflictingIndex) {
     throw new Error(
@@ -88,7 +93,8 @@ function hasUnexpectedIndexForColumn(
     (index) =>
       index.columnNames.includes(columnName) &&
       (!expectedIndex ||
-        index.name !== expectedIndex.name ||
+        normalizeIndexName(index.name) !==
+          normalizeIndexName(expectedIndex.name) ||
         index.isUnique !== expectedIndex.isUnique ||
         index.columnNames.length !== expectedIndex.columnNames.length ||
         index.columnNames.some(
