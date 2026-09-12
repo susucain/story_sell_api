@@ -10,6 +10,7 @@ import { ConfigService, ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { User } from './users/entities/user.entity';
+import { AuthSession } from './auth/entities/auth-session.entity';
 import { ScheduleModule } from '@nestjs/schedule';
 import { JobModule } from './job/job.module';
 import { Job } from './job/entities/job.entity';
@@ -67,7 +68,7 @@ import { LangfuseModule } from './langfuse/langfuse.module';
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
         connectorPackage: 'mysql2',
-        entities: [User, Job, OssFile, VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript],
+        entities: [User, AuthSession, Job, OssFile, VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript],
         synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true',
         migrations: [join(__dirname, 'database/migrations/*{.js,.ts}')],
         migrationsRun: configService.get<string>('RUN_MIGRATIONS') === 'true',

@@ -17,6 +17,15 @@ export class User {
     })
     email: string;
 
+    @Column({ length: 64, nullable: true, unique: true })
+    account: string;
+
+    @Column({ name: 'password_hash', length: 255, nullable: true })
+    passwordHash: string;
+
+    @Column({ name: 'token_version', type: 'int', default: 0 })
+    tokenVersion: number;
+
     @Column({ name: 'douyin_openid', length: 128, nullable: true, unique: true })
     douyinOpenid: string;
 
