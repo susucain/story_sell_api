@@ -84,6 +84,7 @@ export class VideoService {
     const userId = session.userId;
 
     let currentMessageId: number | undefined;
+    let incomingAssetIds: number[] = [];
     const lastUserMsg = messages.filter((m) => m.role === 'user').pop();
     if (lastUserMsg) {
       const saved = await this.saveUserMessage(sessionId, userId, lastUserMsg);
@@ -102,7 +103,7 @@ export class VideoService {
       // 素材必须先入库，才能在本轮预处理阶段并行解析。
       const fileParts = (lastUserMsg.parts ?? []).filter((p: any) => p.type === 'file');
       if (fileParts.length > 0) {
-        await Promise.all(
+        const incomingAssets = await Promise.all(
           fileParts.map((part: any) => {
             const mediaType: string = part.mediaType ?? '';
             return this.createAsset({
@@ -119,6 +120,7 @@ export class VideoService {
             }, userId);
           }),
         );
+        incomingAssetIds = incomingAssets.map((asset) => asset.id);
       }
     }
 
@@ -155,10 +157,16 @@ export class VideoService {
     return createUIMessageStream({
       originalMessages: allUiMessages,
       execute: async ({ writer }) => {
-        const analysisAssets = await this.assetRepo.find({
-          where: { sessionId, assetPurpose: In(['analysis', 'all']) },
-          order: { createdAt: 'ASC' },
-        });
+        const analysisAssets = incomingAssetIds.length > 0
+          ? await this.assetRepo.find({
+            where: {
+              sessionId,
+              id: In(incomingAssetIds),
+              assetPurpose: In(['analysis', 'all']),
+            },
+            order: { createdAt: 'ASC' },
+          })
+          : [];
         const tracker = new ProcessTracker({
           writer,
           analysisAssets,
@@ -167,10 +175,11 @@ export class VideoService {
         });
         tracker.start();
         analysisAssets
-          .filter((asset) => asset.status !== 'parsed')
+          .filter((asset) => asset.status === 'pending' || asset.status === 'failed')
           .forEach((asset) => tracker.markAssetRunning(asset.id));
         const analysisResults = await this.assetAnalysisService.analyzePendingAssets(
           sessionId,
+          incomingAssetIds,
           options.parentSignal,
         );
         analysisResults.forEach((result) => {

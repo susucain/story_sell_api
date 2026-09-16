@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { generateObject } from 'ai';
 import { z } from 'zod/v4';
-import { In, Not, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { VideoAgentExecutionService, VideoAgentTimeoutError } from './video-agent-execution.service';
 import { AssetContentCategory, VideoAsset } from './entities/video-asset.entity';
 import { VideoLLMService } from './video-llm.service';
@@ -45,16 +45,39 @@ export class VideoAssetAnalysisService {
 
   async analyzePendingAssets(
     sessionId: string,
+    assetIds: number[],
     parentSignal?: AbortSignal,
   ): Promise<VideoAssetAnalysisResult[]> {
-    const assets = await this.assetRepo.find({
+    if (assetIds.length === 0) return [];
+    this.throwIfParentAborted(parentSignal);
+
+    const candidates = await this.assetRepo.find({
       where: {
         sessionId,
+        id: In(assetIds),
         assetPurpose: In(['all', 'analysis']),
-        status: Not('parsed'),
+        status: In(['pending', 'failed']),
       },
       order: { createdAt: 'ASC' },
     });
+    const assets: VideoAsset[] = [];
+    for (const asset of candidates) {
+      this.throwIfParentAborted(parentSignal);
+      const claim = await this.assetRepo.update(
+        {
+          id: asset.id,
+          sessionId,
+          assetPurpose: In(['all', 'analysis']),
+          status: In(['pending', 'failed']),
+        },
+        { status: 'parsing' },
+      );
+      if (claim.affected === 1) {
+        asset.status = 'parsing';
+        assets.push(asset);
+      }
+    }
+
     const results: VideoAssetAnalysisResult[] = new Array(assets.length);
     let nextIndex = 0;
     const workerCount = Math.min(
@@ -65,6 +88,7 @@ export class VideoAssetAnalysisService {
     await Promise.all(
       Array.from({ length: workerCount }, async () => {
         while (nextIndex < assets.length) {
+          this.throwIfParentAborted(parentSignal);
           const index = nextIndex++;
           results[index] = await this.analyzeAsset(assets[index], parentSignal);
         }
@@ -79,6 +103,7 @@ export class VideoAssetAnalysisService {
     parentSignal?: AbortSignal,
   ): Promise<VideoAssetAnalysisResult> {
     try {
+      this.throwIfParentAborted(parentSignal);
       const result = await this.executionService.runAssetParse(
         {
           sessionId: asset.sessionId,
@@ -108,9 +133,11 @@ export class VideoAssetAnalysisService {
           abortSignal: signal,
         }),
       );
+      this.throwIfParentAborted(parentSignal);
       const parsed = result.object;
       const contentCategory = parsed.contentCategory as AssetContentCategory;
       asset.parsedContent = {
+        ...(asset.parsedContent ?? {}),
         summary: parsed.summary,
         contentCategory,
       };
@@ -124,9 +151,15 @@ export class VideoAssetAnalysisService {
         contentCategory,
       };
     } catch (error) {
+      if (parentSignal?.aborted) {
+        throw parentSignal.reason;
+      }
       const errorCode = this.getErrorCode(error);
       try {
-        asset.parsedContent = { errorCode };
+        asset.parsedContent = {
+          ...(asset.parsedContent ?? {}),
+          errorCode,
+        };
         asset.status = 'failed';
         await this.assetRepo.save(asset);
       } catch {
@@ -139,9 +172,19 @@ export class VideoAssetAnalysisService {
   private getErrorCode(
     error: unknown,
   ): 'ASSET_PARSE_TIMEOUT' | 'ASSET_PARSE_FAILED' {
-    return error instanceof VideoAgentTimeoutError
-      && error.code === 'ASSET_PARSE_TIMEOUT'
+    return this.isAssetParseTimeout(error)
       ? 'ASSET_PARSE_TIMEOUT'
       : 'ASSET_PARSE_FAILED';
+  }
+
+  private isAssetParseTimeout(error: unknown): error is VideoAgentTimeoutError {
+    return error instanceof VideoAgentTimeoutError
+      && error.code === 'ASSET_PARSE_TIMEOUT';
+  }
+
+  private throwIfParentAborted(parentSignal?: AbortSignal): void {
+    if (parentSignal?.aborted) {
+      throw parentSignal.reason;
+    }
   }
 }
