@@ -28,6 +28,13 @@ export class UsersService {
         return this.usersRepository.findOne({ where: { account } });
     }
 
+    createAccount(credentials: { account: string; passwordHash: string }) {
+        return this.usersRepository.save({
+            ...credentials,
+            status: 'active',
+        });
+    }
+
     findAuthUserById(id: number) {
         return this.usersRepository.findOne({ where: { id } });
     }

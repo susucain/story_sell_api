@@ -199,8 +199,8 @@ function isOwnedAuthSessionsTable(table: Table): boolean {
  * never deleted. Indexes added to unmarked legacy resources are retained on
  * down(), and any altered marker or expected schema is left in place.
  */
-export class AddAuthentication202609120001 implements MigrationInterface {
-  name = 'AddAuthentication202609120001';
+export class AddAuthentication1789214400000 implements MigrationInterface {
+  name = 'AddAuthentication1789214400000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable(USERS_TABLE)) {

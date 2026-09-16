@@ -92,14 +92,14 @@ treated as replay: revoke all user sessions and increment `token_version`.
 
 ### Development Account
 
-Provide an idempotent seed command that only runs when
-`SEED_DEV_ACCOUNT=true`. It creates user `1` if missing, or backfills its credentials
-if present.
+At application startup, bind the configured fixed development credentials to the
+existing `users.id = 1` record when both development-account variables are present.
 
-- Default account name: `dev` (overridable with `DEV_ACCOUNT`).
-- Password comes only from `DEV_ACCOUNT_PASSWORD`; the command fails if unset.
-- Production may run the command only through this explicit deployment opt-in; it does
-  not contain a default development credential.
+- Account comes from `DEV_ACCOUNT`; password comes from `DEV_ACCOUNT_PASSWORD`.
+- Both values must be configured together. A missing user `1` or an account owned by
+  another user fails startup rather than creating or reassigning data.
+- Credentials are bcrypt-compared and updated only when they differ. The process works
+  in production and never contains a default password.
 
 ## API Contract
 
@@ -159,9 +159,8 @@ JWT_ACCESS_TTL=15m
 JWT_REFRESH_TTL=30d
 AUTH_COOKIE_SECURE=true
 CORS_ORIGIN=https://app.example.com
-DEV_ACCOUNT=dev
+DEV_ACCOUNT=
 DEV_ACCOUNT_PASSWORD=
-SEED_DEV_ACCOUNT=false
 ```
 
 Access and refresh secrets are separate, high-entropy values injected through the

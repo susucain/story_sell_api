@@ -1,14 +1,16 @@
 import { Transform, TransformFnParams } from 'class-transformer';
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
+import { ACCOUNT_PATTERN, normalizeAccount } from '../account';
 
 export class LoginDto {
   @Transform(({ value }: TransformFnParams) => {
-    const input: unknown = value;
-    return typeof input === 'string' ? input.trim() : input;
+    return normalizeAccount(value);
   })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(64)
+  @Matches(ACCOUNT_PATTERN, {
+    message: '账号仅支持 3-64 位小写字母、数字、点、下划线或短横线',
+  })
   account: string;
 
   @IsString()

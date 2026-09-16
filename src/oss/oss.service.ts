@@ -47,7 +47,7 @@ export class OssService {
   /** 下载可信外部文件并流式转存到 OSS。 */
   async transferFromUrl(
     sourceUrl: string,
-    options: { ossKey: string; fileName: string; allowedMimeTypes: string[] },
+    options: { ossKey: string; fileName: string; allowedMimeTypes: string[]; userId: number },
   ) {
     const url = await this.validateTransferUrl(sourceUrl);
     const controller = new AbortController();
@@ -82,8 +82,9 @@ export class OssService {
       const ossFile = this.ossFileRepo.create({
         fileName: options.fileName,
         url: result.url,
-        fileType: mimeType,
-        createdBy: 'video_generation',
+      fileType: mimeType,
+      createdBy: 'video_generation',
+      userId: options.userId,
       });
       await this.ossFileRepo.save(ossFile);
       return { url: result.url, fileType: mimeType, ossKey: options.ossKey };
@@ -117,6 +118,7 @@ export class OssService {
     originalName: string,
     fileBuffer: Buffer,
     mimeType: string,
+    userId: number,
   ) {
     // 生成唯一文件名，保留原始扩展名
     const ext = originalName.split('.').pop() || '';
@@ -132,6 +134,7 @@ export class OssService {
       url: result.url,
       fileType: mimeType,
       createdBy: 'system',
+      userId,
     });
     await this.ossFileRepo.save(ossFile);
 
@@ -145,8 +148,9 @@ export class OssService {
   }
 
   /** 分页查询文件记录 */
-  async findAll(page: number = 1, pageSize: number = 10) {
+  async findAll(page: number = 1, pageSize: number = 10, userId: number) {
     const [list, total] = await this.ossFileRepo.findAndCount({
+      where: { userId },
       order: { createdAt: 'DESC' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -161,15 +165,15 @@ export class OssService {
   }
 
   /** 查询单条记录 */
-  findOne(id: number) {
-    return this.ossFileRepo.findOneBy({ id });
+  findOne(id: number, userId: number) {
+    return this.ossFileRepo.findOneBy({ id, userId });
   }
 
   /** 删除记录（仅删除数据库记录，不删除 OSS 文件） */
-  async remove(id: number) {
-    const file = await this.ossFileRepo.findOneBy({ id });
+  async remove(id: number, userId: number) {
+    const file = await this.ossFileRepo.findOneBy({ id, userId });
     if (!file) return null;
-    await this.ossFileRepo.delete(id);
+    await this.ossFileRepo.delete({ id, userId });
     return file;
   }
 }

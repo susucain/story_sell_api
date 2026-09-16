@@ -11,6 +11,10 @@ export class OssFile {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Index('IDX_oss_files_user_id')
+  @Column({ name: 'user_id', type: 'int', nullable: true })
+  userId: number | null;
+
   @Column({ name: 'file_name', type: 'varchar', length: 500, comment: '原始文件名' })
   fileName: string;
 

@@ -22,6 +22,7 @@ import type { AuthTokenResponse, AuthenticatedUser } from './auth.types';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 function getRefreshToken(request: Request): string | undefined {
   const cookies: unknown = request.cookies;
@@ -41,6 +42,23 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {}
+
+  @Public()
+  @Post('register')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<Omit<AuthTokenResponse, 'refreshToken'>> {
+    const result = await this.authService.register(registerDto);
+    this.setRefreshCookie(response, result.refreshToken);
+
+    return {
+      accessToken: result.accessToken,
+      user: result.user,
+    };
+  }
 
   @Public()
   @Post('login')

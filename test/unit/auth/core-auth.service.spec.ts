@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import * as bcrypt from 'bcrypt';
 import { AuthSession } from '../../../src/auth/entities/auth-session.entity';
@@ -38,6 +38,11 @@ function createServiceDependencies() {
   const usersService = {
     findAuthUserById: jest.fn().mockResolvedValue(activeUser),
     findByAccount: jest.fn().mockResolvedValue(activeUser),
+    createAccount: jest.fn().mockResolvedValue({
+      ...activeUser,
+      account: 'new-user',
+      id: 8,
+    }),
     incrementTokenVersion: jest.fn().mockResolvedValue(undefined),
     recordLogin: jest.fn().mockResolvedValue(undefined),
     update: jest.fn().mockResolvedValue(undefined),
@@ -162,6 +167,42 @@ describe('AuthService', () => {
     await expect(
       service.login({ account: 'alice', password: 'correct-password' }),
     ).rejects.toEqual(new UnauthorizedException('账号或密码错误'));
+  });
+
+  it('registers a new account and immediately creates an authenticated session', async () => {
+    const { jwtService, service, usersService } = createServiceDependencies();
+    jwtService.signAsync
+      .mockResolvedValueOnce('registered-access-token')
+      .mockResolvedValueOnce('registered-refresh-token');
+    bcryptMock.hash
+      .mockResolvedValueOnce('registered-password-hash')
+      .mockResolvedValueOnce('registered-refresh-hash');
+
+    const result = await service.register({
+      account: 'new-user',
+      confirmPassword: 'StrongPassword123!',
+      password: 'StrongPassword123!',
+    });
+
+    expect(usersService.createAccount).toHaveBeenCalledWith({
+      account: 'new-user',
+      passwordHash: 'registered-password-hash',
+    });
+    expect(result.accessToken).toBe('registered-access-token');
+    expect(result.refreshToken).toBe('registered-refresh-token');
+  });
+
+  it('maps duplicate registered account errors to a conflict response', async () => {
+    const { service, usersService } = createServiceDependencies();
+    usersService.createAccount.mockRejectedValue({ code: 'ER_DUP_ENTRY' });
+
+    await expect(
+      service.register({
+        account: 'existing-user',
+        confirmPassword: 'StrongPassword123!',
+        password: 'StrongPassword123!',
+      }),
+    ).rejects.toEqual(new ConflictException('账号已被使用'));
   });
 
   it('rotates a valid refresh session into a new hashed refresh session', async () => {

@@ -91,7 +91,7 @@ export function getRefreshCookieOptions(
     path: '/auth',
     sameSite: 'lax',
     secure:
-      configService.get<string>('COOKIE_SECURE') === 'true' ||
+      configService.get<string>('AUTH_COOKIE_SECURE') === 'true' ||
       configService.get<string>('NODE_ENV') === 'production',
   };
 }

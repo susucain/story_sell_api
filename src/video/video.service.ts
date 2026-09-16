@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, LessThanOrEqual, Repository } from 'typeorm';
 import { context, trace } from '@opentelemetry/api';
@@ -27,7 +27,6 @@ import { assertAgentFinalReply } from './agent-reply.validation';
 import { getPresetOutfit, PRESET_AVATARS } from './avatar-catalog';
 
 const RECENT_MESSAGE_LIMIT = 6;
-const FALLBACK_USER_ID = 1;
 
 @Injectable()
 export class VideoService {
@@ -51,12 +50,16 @@ export class VideoService {
     private taskService: VideoTaskService,
   ) {}
 
-  async ensureSession(sessionId: string, userId?: number): Promise<VideoSession> {
-    let session = await this.sessionRepo.findOne({ where: { sessionId } });
+  async ensureSession(sessionId: string, userId: number): Promise<VideoSession> {
+    let session = await this.sessionRepo.findOne({ where: { sessionId, userId } });
     if (!session) {
+      const existingSession = await this.sessionRepo.findOne({ where: { sessionId } });
+      if (existingSession) {
+        throw new NotFoundException('会话不存在');
+      }
       session = this.sessionRepo.create({
         sessionId,
-        userId: userId ?? FALLBACK_USER_ID,
+        userId,
         productProfile: {},
         status: 'active',
       });
@@ -68,9 +71,9 @@ export class VideoService {
   async streamChat(
     sessionId: string,
     messages: UIMessage[],
-    options?: { referencedScriptId?: number; sourceVideoAssetId?: number; userId?: number },
+    options: { referencedScriptId?: number; sourceVideoAssetId?: number; userId: number },
   ) {
-    const session = await this.ensureSession(sessionId, options?.userId);
+    const session = await this.ensureSession(sessionId, options.userId);
     const userId = session.userId;
 
     let currentMessageId: number | undefined;
@@ -97,7 +100,6 @@ export class VideoService {
             const mediaType: string = part.mediaType ?? '';
             return this.createAsset({
               session_id: sessionId,
-              user_id: userId,
               asset_type: mediaType.startsWith('video/')
                 ? 'video'
                 : mediaType.startsWith('image/')
@@ -107,7 +109,7 @@ export class VideoService {
               name: part.filename ?? '附件素材',
               url: part.url,
               duration_sec: typeof part.durationSec === 'number' ? part.durationSec : undefined,
-            });
+            }, userId);
           }),
         );
       }
@@ -319,9 +321,9 @@ export class VideoService {
     }
   }
 
-  async findHistoryBySessionId(sessionId: string): Promise<UIMessage[]> {
+  async findHistoryBySessionId(sessionId: string, userId: number): Promise<UIMessage[]> {
     const messages = await this.messageRepo.find({
-      where: { sessionId },
+      where: { sessionId, userId },
       order: { createdAt: 'ASC' },
       take: 200,
     });
@@ -648,7 +650,6 @@ export class VideoService {
 
   async createAsset(body: {
     session_id: string;
-    user_id?: number;
     asset_type: 'image' | 'video' | 'url';
     asset_purpose?: 'all' | 'analysis' | 'reference';
     name: string;
@@ -656,8 +657,8 @@ export class VideoService {
     thumbnail_url?: string;
     duration_sec?: number;
     content_category?: 'portrait' | 'product' | 'food' | 'store' | 'environment' | 'other';
-  }) {
-    const session = await this.ensureSession(body.session_id, body.user_id);
+  }, userId: number) {
+    const session = await this.ensureSession(body.session_id, userId);
 
     // 去重：同一 session + user 下 url 唯一，重复上传直接返回已有资产，避免重复入库
     const existing = await this.assetRepo.findOne({
@@ -688,20 +689,21 @@ export class VideoService {
     return this.assetRepo.save(asset);
   }
 
-  async findAssetsBySessionId(sessionId: string) {
+  async findAssetsBySessionId(sessionId: string, userId: number) {
     return this.assetRepo.find({
-      where: { sessionId },
+      where: { sessionId, userId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async deleteAsset(assetId: number) {
-    await this.assetRepo.delete(assetId);
+  async deleteAsset(assetId: number, userId: number) {
+    const result = await this.assetRepo.delete({ id: assetId, userId });
+    if (!result.affected) throw new NotFoundException('素材不存在');
     return { success: true };
   }
 
-  async updateAssetPurpose(assetId: number, assetPurpose: 'all' | 'analysis' | 'reference') {
-    const asset = await this.assetRepo.findOne({ where: { id: assetId } });
+  async updateAssetPurpose(assetId: number, userId: number, assetPurpose: 'all' | 'analysis' | 'reference') {
+    const asset = await this.assetRepo.findOne({ where: { id: assetId, userId } });
     if (!asset) {
       throw new Error(`素材不存在: ${assetId}`);
     }
@@ -710,15 +712,15 @@ export class VideoService {
     return this.assetRepo.save(asset);
   }
 
-  async findScriptsBySessionId(sessionId: string) {
+  async findScriptsBySessionId(sessionId: string, userId: number) {
     return this.scriptRepo.find({
-      where: { sessionId },
+      where: { sessionId, userId },
       order: { version: 'DESC' },
     });
   }
 
-  async findScriptById(scriptId: number) {
-    return this.scriptRepo.findOne({ where: { id: scriptId } });
+  async findScriptById(scriptId: number, userId: number) {
+    return this.scriptRepo.findOne({ where: { id: scriptId, userId } });
   }
 
   async findSessionsByUserId(

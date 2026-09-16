@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
@@ -20,6 +24,7 @@ import {
   RefreshTokenPayload,
 } from './auth.types';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 import { AuthSession } from './entities/auth-session.entity';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
@@ -62,6 +67,34 @@ export class AuthService {
 
     await this.usersService.recordLogin(user.id, new Date());
     return this.createTokenResponse(user);
+  }
+
+  async register(registerDto: RegisterDto): Promise<AuthTokenResponse> {
+    if (registerDto.password !== registerDto.confirmPassword) {
+      throw new ConflictException('两次输入的密码不一致');
+    }
+
+    const passwordHash = await bcrypt.hash(
+      registerDto.password,
+      getBcryptRounds(this.configService),
+    );
+    try {
+      const user = await this.usersService.createAccount({
+        account: registerDto.account,
+        passwordHash,
+      });
+      return this.createTokenResponse(user);
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ER_DUP_ENTRY'
+      ) {
+        throw new ConflictException('账号已被使用');
+      }
+      throw error;
+    }
   }
 
   async refresh(refreshToken: string | undefined): Promise<AuthTokenResponse> {

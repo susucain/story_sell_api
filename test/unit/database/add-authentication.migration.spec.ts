@@ -1,5 +1,5 @@
 import { Table, TableColumn, TableForeignKey, TableIndex } from 'typeorm';
-import { AddAuthentication202609120001 } from '../../../src/database/migrations/202609120001-add-authentication';
+import { AddAuthentication1789214400000 } from '../../../src/database/migrations/202609120001-add-authentication';
 
 type QueryRunnerCall = {
   method: string;
@@ -81,11 +81,11 @@ class MigrationQueryRunner {
   }
 }
 
-describe('AddAuthentication202609120001', () => {
+describe('AddAuthentication1789214400000', () => {
   it('creates the authentication schema and indexes', async () => {
     const queryRunner = new MigrationQueryRunner();
 
-    await new AddAuthentication202609120001().up(queryRunner as never);
+    await new AddAuthentication1789214400000().up(queryRunner as never);
 
     const addedColumns = queryRunner.calls
       .filter((call) => call.method === 'addColumn')
@@ -208,7 +208,7 @@ describe('AddAuthentication202609120001', () => {
 
   it('reverses authentication schema changes in dependency-safe order', async () => {
     const queryRunner = new MigrationQueryRunner();
-    const migration = new AddAuthentication202609120001();
+    const migration = new AddAuthentication1789214400000();
 
     await migration.up(queryRunner as never);
     queryRunner.calls.splice(0);
@@ -311,7 +311,7 @@ describe('AddAuthentication202609120001', () => {
         ],
       }),
     ]);
-    const migration = new AddAuthentication202609120001();
+    const migration = new AddAuthentication1789214400000();
 
     await migration.up(queryRunner as never);
     queryRunner.calls.splice(0);
@@ -348,7 +348,7 @@ describe('AddAuthentication202609120001', () => {
       }),
     ]);
 
-    await new AddAuthentication202609120001().down(queryRunner as never);
+    await new AddAuthentication1789214400000().down(queryRunner as never);
 
     expect(queryRunner.calls).toEqual([]);
     await expect(queryRunner.hasColumn('users', 'token_version')).resolves.toBe(
@@ -402,7 +402,7 @@ describe('AddAuthentication202609120001', () => {
         ],
       }),
     ]);
-    const migration = new AddAuthentication202609120001();
+    const migration = new AddAuthentication1789214400000();
 
     await migration.up(queryRunner as never);
 
@@ -482,7 +482,7 @@ describe('AddAuthentication202609120001', () => {
     ]);
 
     await expect(
-      new AddAuthentication202609120001().up(queryRunner as never),
+      new AddAuthentication1789214400000().up(queryRunner as never),
     ).rejects.toThrow(
       'Cannot create required index "IDX_users_account" on table "users"',
     );
@@ -512,7 +512,7 @@ describe('AddAuthentication202609120001', () => {
     ]);
 
     await expect(
-      new AddAuthentication202609120001().up(queryRunner as never),
+      new AddAuthentication1789214400000().up(queryRunner as never),
     ).rejects.toThrow(
       'Cannot create required index "IDX_users_account" on table "users"',
     );
@@ -520,7 +520,7 @@ describe('AddAuthentication202609120001', () => {
 
   it('preserves an owned auth_sessions table with a later foreign key', async () => {
     const queryRunner = new MigrationQueryRunner();
-    const migration = new AddAuthentication202609120001();
+    const migration = new AddAuthentication1789214400000();
 
     await migration.up(queryRunner as never);
     const authSessionsTable = await queryRunner.getTable('auth_sessions');

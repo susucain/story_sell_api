@@ -378,15 +378,15 @@ export class VideoTaskService {
   /**
    * 查询任务状态（主动查询，兼容旧接口）
    */
-  async queryTask(taskId: string) {
-    return this.videoTaskRepo.findOne({ where: { taskId } });
+  async queryTask(taskId: string, userId: number) {
+    return this.videoTaskRepo.findOne({ where: { taskId, userId } });
   }
 
   /**
    * 取消或删除视频生成任务
    */
-  async cancelOrDeleteTask(taskId: string) {
-    const task = await this.videoTaskRepo.findOne({ where: { taskId } });
+  async cancelOrDeleteTask(taskId: string, userId: number) {
+    const task = await this.videoTaskRepo.findOne({ where: { taskId, userId } });
     if (!task) {
       throw new Error(`任务不存在: ${taskId}`);
     }
@@ -421,9 +421,9 @@ export class VideoTaskService {
   /**
    * 根据 sessionId 查询所有任务
    */
-  async findBySessionId(sessionId: string) {
+  async findBySessionId(sessionId: string, userId: number) {
     return this.videoTaskRepo.find({
-      where: { sessionId },
+      where: { sessionId, userId },
       order: { createdAt: 'ASC' },
     });
   }
@@ -493,14 +493,14 @@ export class VideoTaskService {
   /**
    * SSE 订阅任务状态
    */
-  subscribeTaskStatus(taskId: string): Observable<any> {
+  subscribeTaskStatus(taskId: string, userId: number): Observable<any> {
     return new Observable((subscriber) => {
       if (!this.subscribers.has(taskId)) {
         this.subscribers.set(taskId, new Set());
       }
       this.subscribers.get(taskId)!.add(subscriber);
 
-      this.videoTaskRepo.findOne({ where: { taskId } }).then((task) => {
+      this.videoTaskRepo.findOne({ where: { taskId, userId } }).then((task) => {
         if (task) {
           subscriber.next({
             data: {
@@ -677,12 +677,14 @@ export class VideoTaskService {
       ossKey: `${baseKey}/video.mp4`,
       fileName: `${task.taskId}.mp4`,
       allowedMimeTypes: ['video/mp4'],
+      userId: task.userId,
     });
     const lastFrame = typeof content.last_frame_url === 'string'
       ? await this.ossService.transferFromUrl(content.last_frame_url, {
         ossKey: `${baseKey}/last-frame.jpg`,
         fileName: `${task.taskId}-last-frame.jpg`,
         allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+        userId: task.userId,
       })
       : null;
 

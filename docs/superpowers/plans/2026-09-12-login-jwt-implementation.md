@@ -657,7 +657,7 @@
 
   Add deployment instructions covering migration backup, required JWT secrets,
   `CORS_ORIGIN`, proxy `/auth`, the opt-in development seed, and the prohibition on
-  `SEED_DEV_ACCOUNT=true` in production.
+  fixed `DEV_ACCOUNT` and `DEV_ACCOUNT_PASSWORD` configuration in production.
 
 - [ ] **Step 5: Commit**
 
