@@ -15,6 +15,7 @@ import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoToolsService } from './video-tools.service';
 import { VideoPersistenceProcessor } from './video-persistence.processor';
 import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
+import { VideoAgentExecutionService } from './video-agent-execution.service';
 import { BullModule } from '@nestjs/bull';
 import { OssModule } from '../oss/oss.module';
 
@@ -29,6 +30,7 @@ import { OssModule } from '../oss/oss.module';
     VideoToolsService,
     VideoPersistenceProcessor,
     SeedancePromptValidatorService,
+    VideoAgentExecutionService,
   ],
   imports: [
     ToolModule,
