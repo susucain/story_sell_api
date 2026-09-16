@@ -61,41 +61,48 @@ export class VideoAssetAnalysisService {
       order: { createdAt: 'ASC' },
     });
     const assets: VideoAsset[] = [];
-    for (const asset of candidates) {
-      this.throwIfParentAborted(parentSignal);
-      const claim = await this.assetRepo.update(
-        {
-          id: asset.id,
-          sessionId,
-          assetPurpose: In(['all', 'analysis']),
-          status: In(['pending', 'failed']),
-        },
-        { status: 'parsing' },
-      );
-      if (claim.affected === 1) {
-        asset.status = 'parsing';
-        assets.push(asset);
-      }
-    }
-
-    const results: VideoAssetAnalysisResult[] = new Array(assets.length);
-    let nextIndex = 0;
-    const workerCount = Math.min(
-      this.executionService.assetAnalysisConcurrency,
-      assets.length,
-    );
-
-    await Promise.all(
-      Array.from({ length: workerCount }, async () => {
-        while (nextIndex < assets.length) {
-          this.throwIfParentAborted(parentSignal);
-          const index = nextIndex++;
-          results[index] = await this.analyzeAsset(assets[index], parentSignal);
+    try {
+      for (const asset of candidates) {
+        this.throwIfParentAborted(parentSignal);
+        const claim = await this.assetRepo.update(
+          {
+            id: asset.id,
+            sessionId,
+            assetPurpose: In(['all', 'analysis']),
+            status: In(['pending', 'failed']),
+          },
+          { status: 'parsing' },
+        );
+        if (claim.affected === 1) {
+          asset.status = 'parsing';
+          assets.push(asset);
         }
-      }),
-    );
+      }
 
-    return results;
+      const results: VideoAssetAnalysisResult[] = new Array(assets.length);
+      let nextIndex = 0;
+      const workerCount = Math.min(
+        this.executionService.assetAnalysisConcurrency,
+        assets.length,
+      );
+
+      await Promise.all(
+        Array.from({ length: workerCount }, async () => {
+          while (nextIndex < assets.length) {
+            this.throwIfParentAborted(parentSignal);
+            const index = nextIndex++;
+            results[index] = await this.analyzeAsset(assets[index], parentSignal);
+          }
+        }),
+      );
+
+      return results;
+    } catch (error) {
+      if (parentSignal?.aborted && !this.isAssetParseTimeout(parentSignal.reason)) {
+        await this.releaseClaims(sessionId, assets);
+      }
+      throw error;
+    }
   }
 
   private async analyzeAsset(
@@ -180,6 +187,22 @@ export class VideoAssetAnalysisService {
   private isAssetParseTimeout(error: unknown): error is VideoAgentTimeoutError {
     return error instanceof VideoAgentTimeoutError
       && error.code === 'ASSET_PARSE_TIMEOUT';
+  }
+
+  private async releaseClaims(sessionId: string, assets: VideoAsset[]): Promise<void> {
+    await Promise.all(
+      assets
+        .filter((asset) => asset.status === 'parsing')
+        .map(async (asset) => {
+          const release = await this.assetRepo.update(
+            { id: asset.id, sessionId, status: 'parsing' },
+            { status: 'pending' },
+          );
+          if (release.affected === 1) {
+            asset.status = 'pending';
+          }
+        }),
+    );
   }
 
   private throwIfParentAborted(parentSignal?: AbortSignal): void {

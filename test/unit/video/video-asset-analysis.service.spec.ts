@@ -245,6 +245,33 @@ describe('VideoAssetAnalysisService', () => {
     ).rejects.toBe(reason);
     expect(mockedGenerateObject).not.toHaveBeenCalled();
   });
+
+  it('releases claimed assets to pending after parent cancellation', async () => {
+    const asset = {
+      ...createAsset(1),
+      parsedContent: { durationSec: 8 },
+    };
+    assetRepo.find.mockResolvedValue([asset]);
+    const controller = new AbortController();
+    const reason = new Error('request cancelled');
+    (executionService.runAssetParse as jest.Mock).mockImplementation(async () => {
+      controller.abort(reason);
+      throw reason;
+    });
+
+    await expect(
+      service.analyzePendingAssets('session-1', [1], controller.signal),
+    ).rejects.toBe(reason);
+
+    expect(asset).toMatchObject({
+      status: 'pending',
+      parsedContent: { durationSec: 8 },
+    });
+    expect(assetRepo.update).toHaveBeenLastCalledWith(
+      { id: 1, sessionId: 'session-1', status: 'parsing' },
+      { status: 'pending' },
+    );
+  });
 });
 
 describe('ProcessTracker asset failures', () => {
