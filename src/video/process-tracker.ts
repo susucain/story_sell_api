@@ -61,7 +61,6 @@ const GUIDELINE_CARDS: ProcessCard[] = [
 ];
 
 const GENERATION_TOOLS = new Set([
-  'parse_asset',
   'read_file',
   'write_file',
   'update_product_profile',
@@ -174,6 +173,10 @@ export class ProcessTracker {
     this.emit();
     // 阶段 2 在 Skill 加载完成后即完成
     this.markPhaseDone('load-guidelines');
+    const materialPhase = this.state.phases.find((phase) => phase.id === 'parse-materials');
+    if (materialPhase?.items?.every((item) => item.status === 'completed' || item.status === 'error')) {
+      this.markPhaseDone('parse-materials');
+    }
   }
 
   /** 记录非状态变更的创作流程活动（如 read_file / write_file） */
@@ -205,7 +208,26 @@ export class ProcessTracker {
       item.description = summary;
       item.tag = { text: '已解析', type: 'success' };
     }
-    if (phase.items.every((i) => i.status === 'completed')) {
+    if (phase.items.every((i) => i.status === 'completed' || i.status === 'error')) {
+      this.markPhaseDone('parse-materials');
+    } else {
+      this.emit();
+    }
+  }
+
+  /** 标记素材解析失败，后续请求可重试。 */
+  markAssetFailed(assetId: number, _errorCode: string) {
+    if (!this.started || this.finished) return;
+    this.hasGenerationActivity = true;
+    const phase = this.state.phases.find((p) => p.id === 'parse-materials');
+    if (!phase?.items) return;
+    const item = phase.items.find((i) => i.id === `asset-${assetId}`);
+    if (item) {
+      item.status = 'error';
+      item.description = '素材解析失败，可在后续请求中重试';
+      item.tag = { text: '可重试', type: 'info' };
+    }
+    if (phase.items.every((i) => i.status === 'completed' || i.status === 'error')) {
       this.markPhaseDone('parse-materials');
     } else {
       this.emit();

@@ -22,6 +22,7 @@ import { SkillLoaderService } from './skill-loader.service';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoToolsService } from './video-tools.service';
 import { VideoTaskService } from './video-task.service';
+import { VideoAssetAnalysisService } from './video-asset-analysis.service';
 import { ProcessTracker } from './process-tracker';
 import { assertAgentFinalReply } from './agent-reply.validation';
 import { getPresetOutfit, PRESET_AVATARS } from './avatar-catalog';
@@ -48,6 +49,7 @@ export class VideoService {
     private storyboardParser: StoryboardParserService,
     private toolsService: VideoToolsService,
     private taskService: VideoTaskService,
+    private assetAnalysisService: VideoAssetAnalysisService,
   ) {}
 
   async ensureSession(sessionId: string, userId: number): Promise<VideoSession> {
@@ -71,7 +73,12 @@ export class VideoService {
   async streamChat(
     sessionId: string,
     messages: UIMessage[],
-    options: { referencedScriptId?: number; sourceVideoAssetId?: number; userId: number },
+    options: {
+      referencedScriptId?: number;
+      sourceVideoAssetId?: number;
+      userId: number;
+      parentSignal?: AbortSignal;
+    },
   ) {
     const session = await this.ensureSession(sessionId, options.userId);
     const userId = session.userId;
@@ -92,7 +99,7 @@ export class VideoService {
       }
 
       // 用户消息中的文件附件在发送时统一入库（前端上传/添加链接时不入库）。
-      // 入库时机必须在模型 parse_asset 解析之前，否则素材不在库中无法按 asset_id 定位。
+      // 素材必须先入库，才能在本轮预处理阶段并行解析。
       const fileParts = (lastUserMsg.parts ?? []).filter((p: any) => p.type === 'file');
       if (fileParts.length > 0) {
         await Promise.all(
@@ -145,33 +152,56 @@ export class VideoService {
       this.prepareQwenVideoMessages(allUiMessages),
     );
 
-    const system = await this.buildSystemPrompt(session, referencedScript, sourceVideoAsset);
-    const tools = this.toolsService.buildTools({
-      sessionId,
-      userId,
-      currentMessageId,
-      referencedVersion: referencedScript?.version,
-      fullVideoEdit: sourceVideoAsset
-        ? {
-          sourceAssetId: sourceVideoAsset.id,
-          sourceDurationSec: sourceVideoAsset.parsedContent!.durationSec,
-        }
-        : undefined,
-    });
-
-    const analysisAssets = await this.assetRepo.find({
-      where: { sessionId, assetPurpose: In(['analysis', 'all']) },
-      order: { createdAt: 'ASC' },
-    });
-
     return createUIMessageStream({
       originalMessages: allUiMessages,
       execute: async ({ writer }) => {
+        const analysisAssets = await this.assetRepo.find({
+          where: { sessionId, assetPurpose: In(['analysis', 'all']) },
+          order: { createdAt: 'ASC' },
+        });
         const tracker = new ProcessTracker({
           writer,
           analysisAssets,
           productProfile: session.productProfile,
           isModification: !!referencedScript,
+        });
+        tracker.start();
+        analysisAssets
+          .filter((asset) => asset.status !== 'parsed')
+          .forEach((asset) => tracker.markAssetRunning(asset.id));
+        const analysisResults = await this.assetAnalysisService.analyzePendingAssets(
+          sessionId,
+          options.parentSignal,
+        );
+        analysisResults.forEach((result) => {
+          if (result.status === 'parsed') {
+            tracker.markAssetParsed(result.assetId, result.summary);
+          } else {
+            tracker.markAssetFailed(result.assetId, result.errorCode);
+          }
+        });
+
+        const refreshedAssets = await this.assetRepo.find({
+          where: { sessionId },
+          order: { createdAt: 'ASC' },
+        });
+        const system = await this.buildSystemPrompt(
+          session,
+          referencedScript,
+          sourceVideoAsset,
+          refreshedAssets,
+        );
+        const tools = this.toolsService.buildTools({
+          sessionId,
+          userId,
+          currentMessageId,
+          referencedVersion: referencedScript?.version,
+          fullVideoEdit: sourceVideoAsset
+            ? {
+              sourceAssetId: sourceVideoAsset.id,
+              sourceDurationSec: sourceVideoAsset.parsedContent!.durationSec,
+            }
+            : undefined,
         });
 
         // 创建 OpenTelemetry 根 span，注入 Langfuse 标准 trace 属性。
@@ -201,7 +231,7 @@ export class VideoService {
             async () => {
               const agent = new ToolLoopAgent({
                 instructions: system,
-                model: this.llmService.getProvider()(this.llmService.getModel()),
+                model: this.llmService.getLanguageModel(),
                 tools,
                 stopWhen: isStepCount(20),
                 telemetry: {
@@ -281,9 +311,7 @@ export class VideoService {
       }
       if (!ProcessTracker.isGenerationTool(toolName)) return;
 
-      if (toolName === 'parse_asset' && input?.asset_id != null) {
-        tracker.markAssetRunning(Number(input.asset_id));
-      } else if (toolName === 'update_product_profile') {
+      if (toolName === 'update_product_profile') {
         tracker.markProfileRunning();
       } else if (toolName === 'generate_script') {
         tracker.markGenerating();
@@ -298,9 +326,7 @@ export class VideoService {
       const toolName = toolCallMap.get(toolCallId);
       if (!toolName) return;
 
-      if (toolName === 'parse_asset' && output?.asset_id != null) {
-        tracker.markAssetParsed(Number(output.asset_id), output.summary ?? '已解析');
-      } else if (toolName === 'update_product_profile') {
+      if (toolName === 'update_product_profile') {
         tracker.markProfileUpdated(output?.profile);
       } else if (toolName === 'complete_without_script_change' && output?.success) {
         tracker.markScriptUnchanged(output.description ?? '当前脚本已满足本次修改要求');
@@ -473,10 +499,14 @@ export class VideoService {
     session: VideoSession,
     referencedScript: VideoScript | null,
     sourceVideoAsset: VideoAsset | null,
+    currentAssets?: VideoAsset[],
   ): Promise<string> {
     const [skillMeta, assets, latestScript, activeTask] = await Promise.all([
       this.skillLoader.loadMeta(),
-      this.assetRepo.find({ where: { sessionId: session.sessionId }, order: { createdAt: 'ASC' } }),
+      currentAssets ?? this.assetRepo.find({
+        where: { sessionId: session.sessionId },
+        order: { createdAt: 'ASC' },
+      }),
       this.scriptRepo.findOne({
         where: { sessionId: session.sessionId, userId: session.userId },
         order: { version: 'DESC' },
@@ -526,7 +556,9 @@ export class VideoService {
       prompt += `\n## 关联素材\n`;
       for (const asset of assets) {
         const summary = asset.assetPurpose !== 'reference'
-          ? (asset.parsedContent?.summary || '待解析（可调用 parse_asset 解析，asset_id 见 # 编号）')
+          ? (asset.status === 'failed'
+            ? '素材解析失败，可在后续请求中重试'
+            : asset.parsedContent?.summary || '待解析')
           : asset.url;
         const duration = asset.assetType === 'video' && typeof asset.parsedContent?.durationSec === 'number'
           ? `，时长 ${asset.parsedContent.durationSec} 秒`
