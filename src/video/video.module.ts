@@ -35,7 +35,13 @@ import { OssModule } from '../oss/oss.module';
   imports: [
     ToolModule,
     OssModule,
-    TypeOrmModule.forFeature([VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript]),
+    TypeOrmModule.forFeature([
+      VideoSession,
+      VideoTask,
+      VideoMessage,
+      VideoAsset,
+      VideoScript,
+    ]),
     BullModule.registerQueue({
       name: 'video-tasks',
     }),

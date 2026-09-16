@@ -75,12 +75,17 @@ describe('VideoAgentExecutionService', () => {
     let receivedSignal: AbortSignal | undefined;
 
     const result = service.runTool(
-      { requestId: 'request-1', toolName: 'save_script', parentSignal: parent.signal },
+      {
+        requestId: 'request-1',
+        toolName: 'save_script',
+        parentSignal: parent.signal,
+      },
       async (signal) => {
         receivedSignal = signal;
         return new Promise<void>(() => undefined);
       },
     );
+    await Promise.resolve();
     const rejection = expect(result).rejects.toBe(reason);
 
     parent.abort(reason);
@@ -88,6 +93,20 @@ describe('VideoAgentExecutionService', () => {
     await rejection;
     expect(receivedSignal?.aborted).toBe(true);
     expect(receivedSignal?.reason).toBe(reason);
+  });
+
+  it('does not start work when its parent is cancelled immediately after runTool returns', async () => {
+    const service = createService();
+    const parent = new AbortController();
+    const reason = new Error('request cancelled before deferred work starts');
+    const work = jest.fn(() => Promise.resolve());
+
+    const result = service.runTool({ parentSignal: parent.signal }, work);
+    const rejection = expect(result).rejects.toBe(reason);
+    parent.abort(reason);
+
+    await rejection;
+    expect(work).not.toHaveBeenCalled();
   });
 
   it('does not start work when its parent is already cancelled', async () => {
@@ -98,7 +117,10 @@ describe('VideoAgentExecutionService', () => {
     parent.abort(reason);
 
     await expect(
-      service.runTool({ requestId: 'request-1', parentSignal: parent.signal }, work),
+      service.runTool(
+        { requestId: 'request-1', parentSignal: parent.signal },
+        work,
+      ),
     ).rejects.toBe(reason);
     expect(work).not.toHaveBeenCalled();
   });
@@ -106,7 +128,8 @@ describe('VideoAgentExecutionService', () => {
   it('writes a redacted structured phase log', async () => {
     const service = createService();
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
-    const suppliedUrl = 'https://secret.example.test/private-input.mp4?token=never-log-this';
+    const suppliedUrl =
+      'https://secret.example.test/private-input.mp4?token=never-log-this';
 
     await expect(
       service.runTool(
@@ -116,21 +139,62 @@ describe('VideoAgentExecutionService', () => {
           toolName: 'extract_audio',
           assetId: 42,
         },
-        async () => ({ source: suppliedUrl }),
+        () => ({ source: suppliedUrl }),
       ),
     ).resolves.toEqual({ source: suppliedUrl });
 
     const output = String(log.mock.calls[0][0]);
-    expect(JSON.parse(output)).toEqual(expect.objectContaining({
-      requestId: 'request-1',
-      sessionId: 'session-1',
-      phase: 'tool',
-      toolName: 'extract_audio',
-      assetId: 42,
-      outcome: 'succeeded',
-      durationMs: expect.any(Number),
-    }));
+    const parsedOutput = JSON.parse(output) as Record<string, unknown>;
+    expect(parsedOutput).toEqual(
+      expect.objectContaining({
+        requestId: 'request-1',
+        sessionId: 'session-1',
+        phase: 'tool',
+        toolName: 'extract_audio',
+        assetId: 42,
+        outcome: 'succeeded',
+      }),
+    );
+    expect(typeof parsedOutput.durationMs).toBe('number');
     expect(output).not.toContain(suppliedUrl);
+  });
+
+  it('logs the parent timeout code when a child phase aborts', async () => {
+    const service = createService();
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    const parent = new AbortController();
+    const parentTimeout = new VideoAgentTimeoutError(
+      'AGENT_TOTAL_TIMEOUT',
+      'agent_total',
+      300000,
+    );
+
+    const result = service.runTool(
+      { requestId: 'request-1', parentSignal: parent.signal },
+      (signal) =>
+        new Promise<void>((resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => reject(new Error('provider cancelled')),
+            {
+              once: true,
+            },
+          );
+        }),
+    );
+    const rejection = expect(result).rejects.toBe(parentTimeout);
+
+    await Promise.resolve();
+    parent.abort(parentTimeout);
+
+    await rejection;
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toEqual(
+      expect.objectContaining({
+        phase: 'tool',
+        outcome: 'aborted',
+        errorCode: 'AGENT_TOTAL_TIMEOUT',
+      }),
+    );
   });
 
   it('uses defaults and accepts positive integer environment overrides', () => {
@@ -165,6 +229,14 @@ describe('VideoAgentExecutionService', () => {
 
     expect(createService).toThrow(
       'VIDEO_AGENT_TOOL_TIMEOUT_MS must be a positive integer.',
+    );
+  });
+
+  it('rejects values larger than the maximum Node timer delay', () => {
+    process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = '2147483648';
+
+    expect(createService).toThrow(
+      'VIDEO_AGENT_TOTAL_TIMEOUT_MS must be a positive integer.',
     );
   });
 });

@@ -44,6 +44,7 @@ const DEFAULTS = {
   totalTimeoutMs: 300000,
   assetAnalysisConcurrency: 3,
 } as const;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 @Injectable()
 export class VideoAgentExecutionService {
@@ -171,7 +172,10 @@ export class VideoAgentExecutionService {
     );
   }
 
-  async run<T>(options: VideoAgentPhaseOptions, work: VideoAgentPhaseWork<T>): Promise<T> {
+  async run<T>(
+    options: VideoAgentPhaseOptions,
+    work: VideoAgentPhaseWork<T>,
+  ): Promise<T> {
     const startedAt = Date.now();
     const controller = new AbortController();
     let timeoutError: VideoAgentTimeoutError | undefined;
@@ -187,7 +191,9 @@ export class VideoAgentExecutionService {
       if (options.parentSignal.aborted) {
         onParentAbort();
       } else {
-        options.parentSignal.addEventListener('abort', onParentAbort, { once: true });
+        options.parentSignal.addEventListener('abort', onParentAbort, {
+          once: true,
+        });
       }
     }
 
@@ -206,11 +212,13 @@ export class VideoAgentExecutionService {
     }, options.timeoutMs);
 
     const aborted = new Promise<never>((_, reject) => {
-      abortListener = () => reject(controller.signal.reason);
+      abortListener = () => reject(controller.signal.reason as Error);
       if (controller.signal.aborted) {
         abortListener();
       } else {
-        controller.signal.addEventListener('abort', abortListener, { once: true });
+        controller.signal.addEventListener('abort', abortListener, {
+          once: true,
+        });
       }
     });
 
@@ -220,18 +228,32 @@ export class VideoAgentExecutionService {
       }
 
       const result = await Promise.race([
-        Promise.resolve().then(() => work(controller.signal)),
+        Promise.resolve().then(() => {
+          if (controller.signal.aborted) {
+            throw controller.signal.reason;
+          }
+          return work(controller.signal);
+        }),
         aborted,
       ]);
       this.log(options, startedAt, 'succeeded');
       return result;
     } catch (error) {
       const isTimeout = error === timeoutError;
+      const abortReason: unknown = controller.signal.reason;
       this.log(
         options,
         startedAt,
-        isTimeout ? 'timed_out' : controller.signal.aborted ? 'aborted' : 'failed',
-        isTimeout ? timeoutError?.code : error instanceof VideoAgentTimeoutError ? error.code : undefined,
+        isTimeout
+          ? 'timed_out'
+          : controller.signal.aborted
+            ? 'aborted'
+            : 'failed',
+        abortReason instanceof VideoAgentTimeoutError
+          ? abortReason.code
+          : error instanceof VideoAgentTimeoutError
+            ? error.code
+            : undefined,
       );
       throw error;
     } finally {
@@ -255,10 +277,10 @@ export class VideoAgentExecutionService {
 
     const parsed = typeof value === 'number' ? value : Number(value);
     if (
-      typeof value === 'string' &&
-      !/^[1-9]\d*$/.test(value)
-      || !Number.isSafeInteger(parsed)
-      || parsed <= 0
+      (typeof value === 'string' && !/^[1-9]\d*$/.test(value)) ||
+      !Number.isSafeInteger(parsed) ||
+      parsed <= 0 ||
+      parsed > MAX_TIMER_DELAY_MS
     ) {
       throw new Error(`${key} must be a positive integer.`);
     }
@@ -272,15 +294,17 @@ export class VideoAgentExecutionService {
     outcome: 'succeeded' | 'timed_out' | 'aborted' | 'failed',
     errorCode?: VideoAgentTimeoutCode,
   ): void {
-    this.logger.log(JSON.stringify({
-      requestId: context.requestId,
-      sessionId: context.sessionId,
-      phase: context.phase,
-      toolName: context.toolName,
-      assetId: context.assetId,
-      durationMs: Date.now() - startedAt,
-      outcome,
-      errorCode,
-    }));
+    this.logger.log(
+      JSON.stringify({
+        requestId: context.requestId,
+        sessionId: context.sessionId,
+        phase: context.phase,
+        toolName: context.toolName,
+        assetId: context.assetId,
+        durationMs: Date.now() - startedAt,
+        outcome,
+        errorCode,
+      }),
+    );
   }
 }
