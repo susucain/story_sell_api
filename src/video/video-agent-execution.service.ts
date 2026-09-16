@@ -198,7 +198,15 @@ export class VideoAgentExecutionService {
     }
 
     if (controller.signal.aborted) {
-      this.log(options, startedAt, 'aborted');
+      const abortReason: unknown = controller.signal.reason;
+      this.log(
+        options,
+        startedAt,
+        'aborted',
+        abortReason instanceof VideoAgentTimeoutError
+          ? abortReason.code
+          : undefined,
+      );
       throw controller.signal.reason;
     }
 

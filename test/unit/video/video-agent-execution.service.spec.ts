@@ -125,6 +125,33 @@ describe('VideoAgentExecutionService', () => {
     expect(work).not.toHaveBeenCalled();
   });
 
+  it('logs an inherited timeout code when its parent is already cancelled', async () => {
+    const service = createService();
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    const parent = new AbortController();
+    const parentTimeout = new VideoAgentTimeoutError(
+      'AGENT_TOTAL_TIMEOUT',
+      'agent_total',
+      300000,
+    );
+    parent.abort(parentTimeout);
+
+    await expect(
+      service.runTool(
+        { requestId: 'request-1', parentSignal: parent.signal },
+        jest.fn(),
+      ),
+    ).rejects.toBe(parentTimeout);
+
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toEqual(
+      expect.objectContaining({
+        phase: 'tool',
+        outcome: 'aborted',
+        errorCode: 'AGENT_TOTAL_TIMEOUT',
+      }),
+    );
+  });
+
   it('writes a redacted structured phase log', async () => {
     const service = createService();
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
