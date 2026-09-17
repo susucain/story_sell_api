@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { WebSocketServer } from 'ws';
 import { TtsRelayService } from './speech/tts-relay.service';
 import cookieParser from 'cookie-parser';
+import { randomUUID } from 'crypto';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,6 +16,12 @@ async function bootstrap() {
   // 启用应用关闭钩子，确保在应用关闭时执行清理操作
   app.enableShutdownHooks();
   app.use(cookieParser());
+  app.use((req, res, next) => {
+    const requestId = randomUUID();
+    res.locals.requestId = requestId;
+    res.setHeader('X-Request-Id', requestId);
+    next();
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

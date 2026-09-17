@@ -3,8 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { generateObject } from 'ai';
 import { z } from 'zod/v4';
 import { In, Repository } from 'typeorm';
-import { VideoAgentExecutionService, VideoAgentTimeoutError } from './video-agent-execution.service';
-import { AssetContentCategory, VideoAsset } from './entities/video-asset.entity';
+import {
+  VideoAgentExecutionService,
+  VideoAgentTimeoutError,
+} from './video-agent-execution.service';
+import {
+  AssetContentCategory,
+  VideoAsset,
+} from './entities/video-asset.entity';
 import { VideoLLMService } from './video-llm.service';
 
 const CONTENT_CATEGORIES = [
@@ -23,16 +29,16 @@ const analysisSchema = z.object({
 
 export type VideoAssetAnalysisResult =
   | {
-    assetId: number;
-    status: 'parsed';
-    summary: string;
-    contentCategory: AssetContentCategory;
-  }
+      assetId: number;
+      status: 'parsed';
+      summary: string;
+      contentCategory: AssetContentCategory;
+    }
   | {
-    assetId: number;
-    status: 'failed';
-    errorCode: 'ASSET_PARSE_TIMEOUT' | 'ASSET_PARSE_FAILED';
-  };
+      assetId: number;
+      status: 'failed';
+      errorCode: 'ASSET_PARSE_TIMEOUT' | 'ASSET_PARSE_FAILED';
+    };
 
 @Injectable()
 export class VideoAssetAnalysisService {
@@ -47,6 +53,7 @@ export class VideoAssetAnalysisService {
     sessionId: string,
     assetIds: number[],
     parentSignal?: AbortSignal,
+    requestId?: string,
   ): Promise<VideoAssetAnalysisResult[]> {
     if (assetIds.length === 0) return [];
     this.throwIfParentAborted(parentSignal);
@@ -91,14 +98,21 @@ export class VideoAssetAnalysisService {
           while (nextIndex < assets.length) {
             this.throwIfParentAborted(parentSignal);
             const index = nextIndex++;
-            results[index] = await this.analyzeAsset(assets[index], parentSignal);
+            results[index] = await this.analyzeAsset(
+              assets[index],
+              parentSignal,
+              requestId,
+            );
           }
         }),
       );
 
       return results;
     } catch (error) {
-      if (parentSignal?.aborted && !this.isAssetParseTimeout(parentSignal.reason)) {
+      if (
+        parentSignal?.aborted &&
+        !this.isAssetParseTimeout(parentSignal.reason)
+      ) {
         await this.releaseClaims(sessionId, assets);
       }
       throw error;
@@ -108,37 +122,43 @@ export class VideoAssetAnalysisService {
   private async analyzeAsset(
     asset: VideoAsset,
     parentSignal?: AbortSignal,
+    requestId?: string,
   ): Promise<VideoAssetAnalysisResult> {
     try {
       this.throwIfParentAborted(parentSignal);
       const result = await this.executionService.runAssetParse(
         {
+          requestId,
           sessionId: asset.sessionId,
           assetId: asset.id,
           parentSignal,
         },
-        async (signal) => generateObject({
-          model: this.llmService.getLanguageModel(),
-          messages: [{
-            role: 'user',
-            content: [
+        async (signal) =>
+          generateObject({
+            model: this.llmService.getLanguageModel(),
+            messages: [
               {
-                type: 'text',
-                text: 'Analyze this visual asset. Return JSON with a concise summary and contentCategory from: portrait, product, food, store, environment, other.',
-              },
-              {
-                type: 'file',
-                data: new URL(asset.url),
-                mediaType: 'image/jpeg',
-                providerOptions: asset.assetType === 'video'
-                  ? { openaiCompatible: { qwenVideoInput: true } }
-                  : undefined,
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Analyze this visual asset. Return JSON with a concise summary and contentCategory from: portrait, product, food, store, environment, other.',
+                  },
+                  {
+                    type: 'file',
+                    data: new URL(asset.url),
+                    mediaType: 'image/jpeg',
+                    providerOptions:
+                      asset.assetType === 'video'
+                        ? { openaiCompatible: { qwenVideoInput: true } }
+                        : undefined,
+                  },
+                ],
               },
             ],
-          }],
-          schema: analysisSchema,
-          abortSignal: signal,
-        }),
+            schema: analysisSchema,
+            abortSignal: signal,
+          }),
       );
       this.throwIfParentAborted(parentSignal);
       const parsed = result.object;
@@ -185,11 +205,16 @@ export class VideoAssetAnalysisService {
   }
 
   private isAssetParseTimeout(error: unknown): error is VideoAgentTimeoutError {
-    return error instanceof VideoAgentTimeoutError
-      && error.code === 'ASSET_PARSE_TIMEOUT';
+    return (
+      error instanceof VideoAgentTimeoutError &&
+      error.code === 'ASSET_PARSE_TIMEOUT'
+    );
   }
 
-  private async releaseClaims(sessionId: string, assets: VideoAsset[]): Promise<void> {
+  private async releaseClaims(
+    sessionId: string,
+    assets: VideoAsset[],
+  ): Promise<void> {
     await Promise.all(
       assets
         .filter((asset) => asset.status === 'parsing')
