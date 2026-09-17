@@ -52,6 +52,10 @@ describe('VideoService system prompt', () => {
     expect(prompt).toContain('references/storyboard.md');
     expect(prompt).toContain('references/seedance.md');
     expect(prompt).toContain('references/character.md');
+    expect(prompt).toContain('references/type-configuration-center.md');
+    expect(prompt).toContain('references/seedance_2_0_template.md');
+    expect(prompt).toContain('sd2-pe/SKILL.md');
+    expect(prompt).not.toContain('只可使用以上四个参考文件');
     expect(prompt).not.toContain('# 生活服务视频分镜生成器');
     expect(prompt).not.toContain('### 镜头 1：福利钩子');
   });

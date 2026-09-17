@@ -568,7 +568,8 @@ export class VideoService {
     prompt += `脚本创作或修改：先读取 \`life-service-storyboard-generator/references/routing.md\`、\`life-service-storyboard-generator/references/storyboard.md\` 和 \`life-service-storyboard-generator/references/seedance.md\`。\n`;
     prompt += `涉及角色、系统虚拟人、上传人像或服装：在上述三份之外，再读取 \`life-service-storyboard-generator/references/character.md\`。\n`;
     prompt += `仅查询视频状态、结果或失败原因，以及仅分析素材时：不要读取创作指南。仅优化或检查 Seedance 提示词时：读取 \`life-service-storyboard-generator/references/seedance.md\`。\n`;
-    prompt += `只可使用以上四个参考文件；不要读取或注入完整 SKILL。\n`;
+    prompt += `按需读取专项资料：按视频类型读取 \`life-service-storyboard-generator/references/type-configuration-center.md\` 的对应段落；按 Seedance 格式读取 \`life-service-storyboard-generator/references/seedance_2_0_template.md\`。每次调用 generate_script 保存 seedance_prompt 前，必须读取 \`sd2-pe/SKILL.md\` 完成审查。\n`;
+    prompt += `所有指南和专项资料均按需读取；不得将其完整内容自动注入系统提示词。\n`;
 
     prompt += `\n## 持久化约束\n`;
     prompt += `创作或修改脚本前调用 start_script_creation；普通问候、素材分析、商品画像更新、知识问答和已确认脚本的视频生成不得调用它。\n`;

@@ -145,10 +145,10 @@ export class VideoToolsService {
   private buildReadFileTool() {
     return tool({
       description:
-        '按需读取视频创作指南。仅允许以下路径：life-service-storyboard-generator/references/routing.md、character.md、storyboard.md、seedance.md。',
+        '按需读取视频创作指南和专项资料。核心路径：life-service-storyboard-generator/references/{routing,character,storyboard,seedance}.md；专项路径：life-service-storyboard-generator/references/type-configuration-center.md、seedance_2_0_template.md、sd2-pe/SKILL.md。',
       inputSchema: zodSchema(
         z.object({
-          path: z.string().describe('允许的参考文件路径：life-service-storyboard-generator/references/{routing,character,storyboard,seedance}.md'),
+          path: z.string().describe('允许的按需路径：核心参考文件、type-configuration-center.md、seedance_2_0_template.md 或 sd2-pe/SKILL.md'),
         }),
       ),
       execute: async ({ path: relativePath }) => {

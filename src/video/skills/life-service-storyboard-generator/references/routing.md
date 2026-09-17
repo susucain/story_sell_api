@@ -37,5 +37,6 @@
 
 ## 读取规则
 
-脚本创作或修改先读取本文件、`storyboard.md` 和 `seedance.md`。涉及系统虚拟人、上传人像或服装时额外读取 `character.md`。直接按完整给定路径调用 `read_file`，禁止先用 `ls` 探索目录；只读当前任务真正需要的指导。
+脚本创作或修改先读取本文件、`storyboard.md` 和 `seedance.md`。涉及系统虚拟人、上传人像或服装时额外读取 `character.md`。按视频类型按需读取 `life-service-storyboard-generator/references/type-configuration-center.md` 的对应配置段落；需要 Seedance 格式时按需读取 `life-service-storyboard-generator/references/seedance_2_0_template.md`。每次调用 `generate_script` 保存 `seedance_prompt` 前，必须读取 `sd2-pe/SKILL.md` 完成 Seedance 专项审查。
 
+直接按完整给定路径调用 `read_file`，禁止先用 `ls` 探索目录；只读取当前任务真正需要的指导和专项资料，不将其完整内容注入系统提示词。
