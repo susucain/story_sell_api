@@ -15,6 +15,8 @@ import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoToolsService } from './video-tools.service';
 import { VideoPersistenceProcessor } from './video-persistence.processor';
 import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
+import { VideoAgentExecutionService } from './video-agent-execution.service';
+import { VideoAssetAnalysisService } from './video-asset-analysis.service';
 import { BullModule } from '@nestjs/bull';
 import { OssModule } from '../oss/oss.module';
 
@@ -29,11 +31,19 @@ import { OssModule } from '../oss/oss.module';
     VideoToolsService,
     VideoPersistenceProcessor,
     SeedancePromptValidatorService,
+    VideoAgentExecutionService,
+    VideoAssetAnalysisService,
   ],
   imports: [
     ToolModule,
     OssModule,
-    TypeOrmModule.forFeature([VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript]),
+    TypeOrmModule.forFeature([
+      VideoSession,
+      VideoTask,
+      VideoMessage,
+      VideoAsset,
+      VideoScript,
+    ]),
     BullModule.registerQueue({
       name: 'video-tasks',
     }),

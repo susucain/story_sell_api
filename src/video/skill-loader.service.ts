@@ -16,6 +16,15 @@ export const VIDEO_SKILLS = {
 
 export type VideoSkillName = keyof typeof VIDEO_SKILLS;
 
+export const VIDEO_REFERENCES = {
+  routing: 'life-service-storyboard-generator/references/routing.md',
+  character: 'life-service-storyboard-generator/references/character.md',
+  storyboard: 'life-service-storyboard-generator/references/storyboard.md',
+  seedance: 'life-service-storyboard-generator/references/seedance.md',
+} as const;
+
+export type VideoReferenceName = keyof typeof VIDEO_REFERENCES;
+
 @Injectable()
 export class SkillLoaderService {
   private readonly skillsDir = process.env.SKILLS_DIR
@@ -36,9 +45,12 @@ export class SkillLoaderService {
     };
   }
 
-  async loadFullContent(skillName: VideoSkillName = 'life-service-storyboard-generator'): Promise<string> {
-    const content = await this.readSkillFile(this.getSkillPath(skillName));
-    return content.replace(/^---\n[\s\S]*?\n---/, '').trim();
+  async loadReference(referenceName: VideoReferenceName): Promise<string> {
+    if (!Object.hasOwn(VIDEO_REFERENCES, referenceName)) {
+      throw new Error(`未知 video reference：${referenceName}`);
+    }
+    const referencePath = VIDEO_REFERENCES[referenceName];
+    return this.readSkillFile(referencePath);
   }
 
   private getSkillPath(skillName: string): string {

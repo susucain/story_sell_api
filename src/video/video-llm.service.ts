@@ -43,6 +43,10 @@ export class VideoLLMService {
     return this.configService.get<string>('MODEL_NAME') || 'qwen3.7-plus';
   }
 
+  getLanguageModel() {
+    return this.getProvider()(this.getModel());
+  }
+
   getVideoModel() {
     return this.configService.get<string>('YUNFEI_API_MODEL') || 'doubao-seedance-2-0-fast-260128';
   }

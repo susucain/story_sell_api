@@ -10,6 +10,7 @@ jest.mock('ioredis', () => {
 });
 
 import { VideoTaskService } from '../../../src/video/video-task.service';
+import { Logger } from '@nestjs/common';
 
 describe('VideoTaskService callbacks', () => {
   let service: VideoTaskService;
@@ -325,3 +326,177 @@ describe('VideoTaskService video generation', () => {
     expect(createdTaskParams.imageUrls).toEqual(['https://example.test/product.png']);
   });
 });
+
+describe('VideoTaskService diagnostics', () => {
+  it('logs only allowlisted task submission and provider response metadata', async () => {
+    const taskRepo = {
+      create: jest.fn((value) => value),
+      save: jest.fn().mockImplementation(async (value) => value),
+    };
+    const config = {
+      get: jest.fn((key: string) => ({
+        YUNFEI_API_KEY: 'api-key',
+        YUNFEI_API_URL: 'https://provider.example.test/tasks',
+        YUNFEI_API_MODEL: 'configured-model',
+        APP_BASE_URL: 'https://app.example.test',
+        VIDEO_CALLBACK_TOKEN: 'callback-token',
+        REDIS_HOST: 'localhost',
+        REDIS_PORT: '6379',
+      })[key]),
+    };
+    const service = new VideoTaskService(
+      taskRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      config as any,
+      {} as any,
+    );
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'task-1',
+        status: 'queued',
+        model: 'provider-model',
+        provider_url: 'https://provider.example.test/private-result',
+      }),
+    } as Response);
+
+    await service.createTask({
+      sessionId: 'session-1',
+      userId: 7,
+      scriptId: 3,
+      prompt: 'secret prompt must not be logged',
+      imageUrls: ['https://assets.example.test/private-image.png'],
+      videoUrls: ['https://assets.example.test/private-video.mp4'],
+      duration: 12,
+      ratio: '16:9',
+    });
+
+    expect(log.mock.calls.map(([message]) => message)).toEqual([
+      JSON.stringify({
+        event: 'video_task_submit',
+        model: 'configured-model',
+        duration: 12,
+        ratio: '16:9',
+        imageCount: 1,
+        videoCount: 1,
+      }),
+      JSON.stringify({
+        event: 'video_task_provider_response',
+        taskId: 'task-1',
+        status: 'queued',
+        model: 'provider-model',
+      }),
+    ]);
+    expect(log.mock.calls.flat().join('')).not.toContain('secret prompt');
+    expect(log.mock.calls.flat().join('')).not.toContain('private-image');
+    expect(log.mock.calls.flat().join('')).not.toContain('private-video');
+    expect(log.mock.calls.flat().join('')).not.toContain('private-result');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('passes task abort signals to the provider and skips persistence after abort', async () => {
+    const taskRepo = {
+      create: jest.fn((value) => value),
+      save: jest.fn(),
+    };
+    const service = createTaskService(taskRepo);
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(
+      async (_url, init) => {
+        receivedSignal = init?.signal as AbortSignal;
+        controller.abort(new Error('request cancelled'));
+        return {
+          ok: true,
+          json: async () => ({
+            id: 'task-1',
+            status: 'queued',
+            model: 'provider-model',
+          }),
+        } as Response;
+      },
+    );
+
+    await expect(
+      service.createTask({
+        sessionId: 'session-1',
+        userId: 7,
+        scriptId: 3,
+        prompt: 'prompt',
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('request cancelled');
+
+    expect(receivedSignal).toBe(controller.signal);
+    expect(taskRepo.save).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    ['submission', '视频生成服务请求失败: HTTP 502'],
+    ['cancellation', '视频生成服务取消失败: HTTP 502'],
+    ['listing', '视频生成服务查询失败: HTTP 502'],
+  ])('does not expose provider response bodies when %s fails', async (operation, message) => {
+    const service = createTaskService({
+      create: jest.fn((value) => value),
+      save: jest.fn().mockResolvedValue({}),
+      findOne: jest.fn().mockResolvedValue({
+        taskId: 'task-1',
+        userId: 7,
+        status: 'queued',
+      }),
+    });
+    const sensitiveBody = 'https://provider.example.test/private?token=secret-prompt';
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: async () => sensitiveBody,
+    } as Response);
+
+    const operationPromise = operation === 'submission'
+      ? service.createTask({
+        sessionId: 'session-1',
+        userId: 7,
+        scriptId: 3,
+        prompt: sensitiveBody,
+      })
+      : operation === 'cancellation'
+        ? service.cancelOrDeleteTask('task-1', 7)
+        : service.listRemoteTasks();
+
+    await expect(operationPromise).rejects.toThrow(message);
+    await expect(operationPromise).rejects.not.toThrow('private');
+    await expect(operationPromise).rejects.not.toThrow('secret-prompt');
+    fetchSpy.mockRestore();
+  });
+});
+
+function createTaskService(taskRepo: any): VideoTaskService {
+  const config = {
+    get: jest.fn((key: string) => ({
+      YUNFEI_API_KEY: 'api-key',
+      YUNFEI_API_URL: 'https://provider.example.test/tasks',
+      YUNFEI_API_MODEL: 'configured-model',
+      APP_BASE_URL: 'https://app.example.test',
+      VIDEO_CALLBACK_TOKEN: 'callback-token',
+      REDIS_HOST: 'localhost',
+      REDIS_PORT: '6379',
+    })[key]),
+  };
+  return new VideoTaskService(
+    taskRepo as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    config as any,
+    {} as any,
+  );
+}
