@@ -14,6 +14,7 @@ jest.mock('@ai-sdk/openai-compatible', () => ({
 }));
 
 import { createUIMessageStream } from 'ai';
+import { ConfigService } from '@nestjs/config';
 import { toVideoAgentError } from '../../../src/video/video.controller';
 import {
   VideoAgentExecutionService,
@@ -85,6 +86,80 @@ describe('video agent stream errors', () => {
       retryable: true,
       message: '创作请求超时，请重试',
     });
+  });
+
+  it('serializes a total timeout after generate_script starts persistence as status unknown', async () => {
+    jest.useFakeTimers();
+    const previousTotalTimeout = process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS;
+    const previousScriptTimeout = process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS;
+    process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = '5';
+    process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS = '100';
+
+    try {
+      const executionService = new VideoAgentExecutionService(
+        new ConfigService(),
+      );
+      const mutationState = { sideEffectStarted: false };
+      const scriptRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((value) => value),
+        save: jest.fn(() => new Promise(() => undefined)),
+      };
+      const tools = new (VideoToolsService as any)(
+        {},
+        scriptRepo,
+        { update: jest.fn() },
+        {},
+        {
+          parse: jest.fn(() => ({
+            hook: '商品介绍',
+            shots: [{ shot: 1 }],
+            meta: {},
+          })),
+        },
+        {},
+        {
+          normalize: jest.fn((prompt) => ({ prompt, changes: [] })),
+          validate: jest.fn(() => ({ errors: [], warnings: [] })),
+        },
+        executionService,
+      ).buildTools({
+        sessionId: 'session-1',
+        userId: 7,
+        mutationState,
+      } as any);
+
+      const pending = executionService.runTotalAgent(
+        { sessionId: 'session-1', mutationState },
+        (signal) =>
+          tools.generate_script.execute(scriptInput(), { abortSignal: signal }),
+      );
+      const result = pending.catch((reason) => reason);
+      for (let index = 0; index < 10; index += 1) {
+        await Promise.resolve();
+      }
+      expect(mutationState.sideEffectStarted).toBe(true);
+      await jest.advanceTimersByTimeAsync(5);
+      const error = await result;
+
+      expect(toVideoAgentError(error)).toEqual({
+        code: 'OPERATION_STATUS_UNKNOWN',
+        retryable: false,
+        message: '操作状态未知，请刷新查看结果',
+      });
+    } finally {
+      if (previousTotalTimeout === undefined) {
+        delete process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS;
+      } else {
+        process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = previousTotalTimeout;
+      }
+      if (previousScriptTimeout === undefined) {
+        delete process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS;
+      } else {
+        process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS = previousScriptTimeout;
+      }
+      jest.useRealTimers();
+    }
   });
 
   it('uses the script-save deadline for generate_script', async () => {

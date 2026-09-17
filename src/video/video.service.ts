@@ -29,7 +29,10 @@ import { VideoTaskService } from './video-task.service';
 import { VideoAssetAnalysisService } from './video-asset-analysis.service';
 import { ProcessTracker } from './process-tracker';
 import { assertAgentFinalReply } from './agent-reply.validation';
-import { VideoAgentExecutionService } from './video-agent-execution.service';
+import {
+  VideoAgentExecutionService,
+  VideoAgentMutationState,
+} from './video-agent-execution.service';
 
 const RECENT_MESSAGE_LIMIT = 6;
 
@@ -191,6 +194,9 @@ export class VideoService {
     const modelMessages = await convertToModelMessages(
       this.prepareQwenVideoMessages(allUiMessages),
     );
+    const requestMutationState: VideoAgentMutationState = {
+      sideEffectStarted: false,
+    };
     let completed = false;
 
     return createUIMessageStream({
@@ -254,6 +260,7 @@ export class VideoService {
             userId,
             currentMessageId,
             parentSignal: totalSignal,
+            mutationState: requestMutationState,
             referencedVersion: referencedScript?.version,
             fullVideoEdit: sourceVideoAsset
               ? {
@@ -357,6 +364,7 @@ export class VideoService {
             requestId: options.requestId,
             sessionId,
             parentSignal: options.parentSignal,
+            mutationState: requestMutationState,
           },
           execute,
         );

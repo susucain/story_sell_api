@@ -32,6 +32,7 @@ interface ToolContext {
   waitingForUser?: boolean;
   scriptUnchanged?: boolean;
   parentSignal?: AbortSignal;
+  mutationState?: VideoAgentMutationState;
   fullVideoEdit?: {
     sourceAssetId: number;
     sourceDurationSec: number;
@@ -102,7 +103,7 @@ export class VideoToolsService {
           {
             ...definition,
             execute: async (input: unknown, sdkContext: ToolExecutionContext) => {
-              const mutationState: VideoAgentMutationState = {
+              const mutationState = context.mutationState ?? {
                 sideEffectStarted: false,
               };
               const run =
