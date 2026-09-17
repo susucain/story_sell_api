@@ -23,18 +23,31 @@ describe('SkillLoaderService', () => {
 
   it('loads the Seedance prompt optimizer by name', async () => {
     const loader = new SkillLoaderService();
-    const [meta, content] = await Promise.all([
-      loader.loadMeta('sd2-pe'),
-      loader.loadFullContent('sd2-pe'),
-    ]);
+    const meta = await loader.loadMeta('sd2-pe');
 
     expect(meta.name).toBe('sd2-pe');
-    expect(content).toContain('Seedance 2.0 Prompt Optimizer');
   });
 
   it('rejects an unknown skill name', async () => {
     const loader = new SkillLoaderService();
-    await expect(loader.loadFullContent('missing-skill' as any)).rejects.toThrow('未知 video skill');
+    await expect(loader.loadMeta('missing-skill' as any)).rejects.toThrow('未知 video skill');
+  });
+
+  it.each(['routing', 'character', 'storyboard', 'seedance'] as const)(
+    'loads the %s video reference by name',
+    async (referenceName) => {
+      const loader = new SkillLoaderService();
+
+      await expect(loader.loadReference(referenceName)).resolves.toContain('#');
+    },
+  );
+
+  it('rejects unknown and traversal reference paths', async () => {
+    const loader = new SkillLoaderService();
+
+    await expect(loader.loadReference('missing' as any)).rejects.toThrow('未知 video reference');
+    await expect(loader.loadReference('../SKILL' as any)).rejects.toThrow('未知 video reference');
+    await expect(loader.loadReference('toString' as any)).rejects.toThrow('未知 video reference');
   });
 
   it('loads skills from SKILLS_DIR in production', async () => {

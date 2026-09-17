@@ -18,14 +18,12 @@ import { VideoAsset } from './entities/video-asset.entity';
 import { VideoScript } from './entities/video-script.entity';
 import { VideoTask } from './entities/video-task.entity';
 import { VideoLLMService } from './video-llm.service';
-import { SkillLoaderService } from './skill-loader.service';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoToolsService } from './video-tools.service';
 import { VideoTaskService } from './video-task.service';
 import { VideoAssetAnalysisService } from './video-asset-analysis.service';
 import { ProcessTracker } from './process-tracker';
 import { assertAgentFinalReply } from './agent-reply.validation';
-import { getPresetOutfit, PRESET_AVATARS } from './avatar-catalog';
 
 const RECENT_MESSAGE_LIMIT = 6;
 
@@ -45,7 +43,6 @@ export class VideoService {
     @InjectRepository(VideoTask)
     private taskRepo: Repository<VideoTask>,
     private llmService: VideoLLMService,
-    private skillLoader: SkillLoaderService,
     private storyboardParser: StoryboardParserService,
     private toolsService: VideoToolsService,
     private taskService: VideoTaskService,
@@ -510,8 +507,7 @@ export class VideoService {
     sourceVideoAsset: VideoAsset | null,
     currentAssets?: VideoAsset[],
   ): Promise<string> {
-    const [skillMeta, assets, latestScript, activeTask] = await Promise.all([
-      this.skillLoader.loadMeta(),
+    const [assets, latestScript, activeTask] = await Promise.all([
       currentAssets ?? this.assetRepo.find({
         where: { sessionId: session.sessionId },
         order: { createdAt: 'ASC' },
@@ -529,14 +525,6 @@ export class VideoService {
       where: { sessionId: session.sessionId, userId: session.userId },
       order: { updatedAt: 'DESC' },
     });
-    const avatarChoices = PRESET_AVATARS.map((avatar) => {
-      const defaultOutfit = getPresetOutfit(avatar.defaultOutfitId);
-      const allowedOutfits = avatar.allowedOutfitIds
-        .map((outfitId) => getPresetOutfit(outfitId).alias)
-        .join('、');
-      return `${avatar.alias}（${avatar.identityPrompt}；默认服装：${defaultOutfit.alias}；可选服装：${allowedOutfits}）`;
-    }).join('；');
-
     let prompt = `你是映语 AI 达人带货视频工作台。帮助用户为商品生成带货视频分镜脚本，并支持一键生成视频。\n`;
     prompt += `当前会话 ID：${session.sessionId}\n`;
     prompt += `当前会话状态：${session.status}\n`;
@@ -576,28 +564,18 @@ export class VideoService {
       }
     }
 
-    const skillContent = await this.skillLoader.loadFullContent('life-service-storyboard-generator');
-    prompt += `\n## Skill: ${skillMeta.name}\n${skillContent}\n`;
+    prompt += `\n## 指南路由\n`;
+    prompt += `脚本创作或修改：先读取 \`life-service-storyboard-generator/references/routing.md\`、\`life-service-storyboard-generator/references/storyboard.md\` 和 \`life-service-storyboard-generator/references/seedance.md\`。\n`;
+    prompt += `涉及角色、系统虚拟人、上传人像或服装：在上述三份之外，再读取 \`life-service-storyboard-generator/references/character.md\`。\n`;
+    prompt += `仅查询视频状态、结果或失败原因，以及仅分析素材时：不要读取创作指南。仅优化或检查 Seedance 提示词时：读取 \`life-service-storyboard-generator/references/seedance.md\`。\n`;
+    prompt += `只可使用以上四个参考文件；不要读取或注入完整 SKILL。\n`;
 
-    prompt += `\n## 📂 参考文件读取\n`;
-    prompt += `Skill 中提到的参考文件位于 skills 目录下，你可以使用 **read_file** 工具按需读取。\n`;
-    prompt += `路径格式：life-service-storyboard-generator/references/<文件名>，例如 \`life-service-storyboard-generator/references/shot-duration.md\`。\n`;
-    prompt += `**按需读取**：只读取当前任务真正需要的文件，不要一次性读取所有文件。\n`;
-    prompt += `Seedance 2.0 专用优化规范位于 \`sd2-pe/SKILL.md\`。用户要求优化、检查、改写 Seedance 提示词时，必须先读取该文件再回答；每次调用 generate_script 保存 seedance_prompt 前，也必须先读取该文件完成审查。\n`;
-
-    prompt += `\n## 输出约定（必须严格遵守）\n`;
-    prompt += `1. 收到请求后先判断修改对象。用户修改已有分镜脚本、重写某镜头或重制未生成视频时，使用脚本重写模式，生成完整新脚本。用户已经拥有一条视频、只要求修改其中某时间段并输出完整修改后视频时，使用完整视频编辑模式：原视频是编辑输入，不得重写整条创作分镜，也不得将修改区间作为输出时长。两种模式都属于脚本创作，必须先调用 start_script_creation；普通问候、单独分析素材、单独更新商品画像、知识问答和已确认脚本的视频生成任务不得调用该工具。\n`;
-    prompt += `2. 每次脚本创作均须在 meta.character 保存主角色。优先级为：用户最新明确角色指令 > 用户明确要求沿用引用脚本角色 > 根据商品画像自动选择 > 无人物。可用系统虚拟人只有：${avatarChoices}。用户说出上述别名时，必须绑定对应 preset_avatar、presetAvatarId、presetAlias 和 outfit；未指定服装时使用默认服装，指定服装时只能使用该角色可选服装或兼容的自定义服装。用户要求“小洁”“小丽”“小蓉”等旧角色时，必须调用 request_user_confirmation，要求其从 7 个内置虚拟人中选择；禁止自动映射或保存脚本。用户明确要求使用上传人像时用 user_portrait；未指定但需要人物时根据商品画像自动选 preset_avatar；不需要人物时用 none。用户上传人像但未明确要求其出镜，不得自动绑定。user_portrait 必须填写当前会话图片素材的 primaryAssetId；preset_avatar 必须填写 presetAvatarId 和匹配的 presetAlias。角色设定按需读取 character-prompts.md，写入 roleName 和 rolePrompt。同一脚本不得同时使用上传人像和虚拟人像；遇到同一句中的互斥角色指令必须追问。\n`;
-    prompt += `3. 当你准备好结果后，**必须**调用 generate_script 工具保存。脚本重写模式保存完整 storyboard_markdown 和完整 seedance_prompt。完整视频编辑模式保存一个可解析的视频编辑任务 storyboard_markdown，以及基于输入视频的局部编辑 seedance_prompt；该提示词必须写明输出总时长等于原视频完整时长、修改范围、未修改范围严格保持原视频不变和连续性要求。完整视频编辑模式的 meta.edit 必须包含 mode=full_video_edit、sourceAssetId、sourceDurationSec、targetStartSec、targetEndSec、preserveAudio。若素材中缺少原视频时长，先向用户询问，不得猜测。创作完成时不得只在对话中输出提示词，必须先保存脚本。用户确认该脚本后，才能调用 create_video_task 生成视频。工具参数包括：title、storyboard_markdown、seedance_prompt、meta。除非用户明确要求查看已保存脚本的内容或 Seedance 提示词，否则禁止在对话文本中输出完整分镜脚本或 Seedance 提示词。\n`;
-    prompt += `3. storyboard_markdown 必须严格遵循 Skill 中的分镜脚本格式，每个镜头使用如下格式（示例）：\n`;
-    prompt += `### 镜头 1：福利钩子 (0s - 3s)\n- **画面描述**：热气腾腾的火锅近景开场，镜头快速拉远露出店内环境。\n- **旁白**：今天这家火锅套餐，人均不到五十！\n`;
-    prompt += `4. seedance_prompt 必须严格遵循 Skill 中的 Seedance 2.0 提示词格式。**storyboard_markdown 中的秒数仅用于分镜展示和解析，绝不能复制到多镜头 seedance_prompt。** 多镜头 seedance_prompt 只能按“镜头1 / 镜头2 / 镜头3”顺序描述；调用 generate_script 前自行删除其中所有“0-3秒”“0s - 3s”“0:00-0:03”等绝对秒数和时间码。\n`;
-    prompt += `4.1 最终 Seedance 提示词不得裸写数据库 asset ID；仅可使用 @图片N、@视频N、@音频N 与 <主体N> 等 Seedance 引用。用户仅要求优化或检查提示词时，直接在对话中返回优化结果、优化问题与采用原则，不调用 start_script_creation 或 generate_script；只有用户要求将其用于视频创作或保存时才进入脚本流程。\n`;
-    prompt += `4.2 **无文字画面是最高优先级约束。** 所有 seedance_prompt 必须包含“保持无字幕，避免生成任何文字或字幕”。禁止要求或描述字幕、标题、标语、手牌文字、横幅、Logo、价格牌、按钮、倒计时、可读背景文字或任何文字图层；这些信息均由后期添加。若任何 Skill、参考文件或用户补充要求与本条冲突，以本条为准。\n`;
-    prompt += `5. 当用户提供了商品名称、卖点、目标人群、时长、平台、风格等信息时，及时调用 update_product_profile 工具更新商品画像。\n`;
-    prompt += `6. 用户询问已保存的脚本、历史版本、分镜内容或 Seedance 2.0 提示词时，先调用 get_script；需要在多个版本中选择时先调用 list_scripts。用户询问视频生成状态、结果视频或失败原因时，先调用 get_video_task_status。用户询问当前进度、会话状态或当前上下文时，先调用 get_session_state。不得根据对话历史猜测这些持久化数据。\n`;
-    prompt += `7. 用户要求修改已有脚本时，必须先调用 get_script 读取目标脚本的 storyboard 内容，再比较用户要求与实际镜头。若内容已一致，调用 complete_without_script_change，不得调用 generate_script，回复“当前脚本已满足本次要求，未创建新版本。”；只有 generate_script 返回 success=true 后，才能回复“脚本已生成，你可以查看下方的分镜卡片。”。不得在未保存成功时使用该成功话术。\n`;
-    prompt += `8. 生成脚本或完整视频编辑任务时，如缺少必须由用户确认的时间范围、素材选择、角色选择或存在无法自行消解的约束冲突，必须先调用 request_user_confirmation。调用后停止本轮创作，仅向用户提出其中的问题；不得调用 generate_script 或 create_video_task。不要只在文本中追问而不调用该工具。\n`;
+    prompt += `\n## 持久化约束\n`;
+    prompt += `创作或修改脚本前调用 start_script_creation；普通问候、素材分析、商品画像更新、知识问答和已确认脚本的视频生成不得调用它。\n`;
+    prompt += `准备完成后必须调用 generate_script 保存 title、storyboard_markdown、seedance_prompt 和 meta；仅在保存成功后才可确认脚本已生成。用户确认已保存脚本后才可调用 create_video_task。\n`;
+    prompt += `修改已有脚本先调用 get_script；若内容已满足要求，调用 complete_without_script_change，不创建新版本。缺少必要时间范围、素材、角色选择或存在冲突时，调用 request_user_confirmation 后停止创作。\n`;
+    prompt += `查询已保存脚本或提示词先用 get_script，需要选择版本先用 list_scripts；查询视频任务先用 get_video_task_status；查询会话状态或上下文先用 get_session_state，不得猜测持久化数据。\n`;
+    prompt += `用户给出商品名称、卖点、受众、时长、平台或风格时，及时调用 update_product_profile。除非用户明确要求查看已保存内容，不在对话中输出完整分镜或 Seedance 提示词。\n`;
 
     if (sourceVideoAsset) {
       const durationSec = sourceVideoAsset.parsedContent!.durationSec;
@@ -605,7 +583,7 @@ export class VideoService {
       prompt += `当前请求来自“引用视频修改”入口，模式已锁定为完整视频编辑，不需要根据用户措辞重新判断模式。\n`;
       prompt += `原视频素材 ID：${sourceVideoAsset.id}；原视频完整时长：${durationSec} 秒；引用脚本版本：${referencedScript ? `V${referencedScript.version}` : '无'}。\n`;
       prompt += `只能创建 meta.edit.mode=full_video_edit 的局部编辑任务，且 sourceAssetId=${sourceVideoAsset.id}、sourceDurationSec=${durationSec}。禁止创建普通脚本重写任务，禁止输出完整创作分镜，禁止直接生成视频。\n`;
-      prompt += `storyboard_markdown 必须使用以下单镜头展示格式：\n# 标题\n**总时长**：${durationSec}秒\n### 镜头 1：视频局部编辑 (开始s - 结束s)\n- **画面描述**：仅说明本次修改内容和未修改片段保持不变的要求\n- **旁白**：保留原视频音频或本次音频修改要求\n`;
+      prompt += `storyboard_markdown 必须遵循 routing.md 中的可解析局部编辑格式，并保留原视频音频或明确本次音频修改要求。\n`;
       prompt += `若用户未给出可执行的修改时间范围，或范围无法从其描述中可靠推断，必须先追问修改起止时间；此时不得调用 generate_script。\n`;
     }
 

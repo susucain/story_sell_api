@@ -145,10 +145,10 @@ export class VideoToolsService {
   private buildReadFileTool() {
     return tool({
       description:
-        '读取 skills 目录下的文件内容。路径相对于 skills 目录，例如 "life-service-storyboard-generator/references/shot-duration.md" 或 "sd2-pe/SKILL.md"。支持 .md / .json / .txt 等文本文件。',
+        '按需读取视频创作指南。仅允许以下路径：life-service-storyboard-generator/references/routing.md、character.md、storyboard.md、seedance.md。',
       inputSchema: zodSchema(
         z.object({
-          path: z.string().describe('相对于 skills 目录的文件路径，例如 life-service-storyboard-generator/references/shot-duration.md'),
+          path: z.string().describe('允许的参考文件路径：life-service-storyboard-generator/references/{routing,character,storyboard,seedance}.md'),
         }),
       ),
       execute: async ({ path: relativePath }) => {
