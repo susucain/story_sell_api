@@ -413,6 +413,49 @@ describe('video agent stream errors', () => {
     );
   });
 
+  it('passes the tool execution signal to createTaskByScriptId', async () => {
+    const phaseController = new AbortController();
+    const executionService = {
+      runTool: jest.fn((_context, work) => work(phaseController.signal)),
+      runScriptSave: jest.fn(),
+    } as unknown as VideoAgentExecutionService;
+    const createTaskByScriptId = jest.fn().mockResolvedValue({
+      taskId: 'task-1',
+      status: 'queued',
+    });
+    const service = new (VideoToolsService as any)(
+      {},
+      {
+        findOne: jest.fn().mockResolvedValue({
+          id: 3,
+          sessionId: 'session-1',
+          userId: 7,
+        }),
+      },
+      {},
+      {},
+      {},
+      { createTaskByScriptId },
+      {},
+      executionService,
+    ) as VideoToolsService;
+    const tools = service.buildTools({
+      sessionId: 'session-1',
+      userId: 7,
+    } as any) as any;
+
+    await tools.create_video_task.execute(
+      { script_id: 3 },
+      { abortSignal: new AbortController().signal },
+    );
+
+    expect(createTaskByScriptId).toHaveBeenCalledWith(3, {
+      sessionId: 'session-1',
+      userId: 7,
+      signal: phaseController.signal,
+    });
+  });
+
   it('does not create or persist a script when its save deadline expires during version lookup', async () => {
     const timeout = new VideoAgentTimeoutError(
       'TOOL_TIMEOUT',
@@ -533,6 +576,87 @@ describe('video agent stream errors', () => {
         parts: persistedUserMessage.parts,
       }),
     ]);
+  });
+
+  it('reanalyzes failed assets referenced by the persisted retry message', async () => {
+    let streamOptions: any;
+    mockedCreateUIMessageStream.mockImplementation((options: any) => {
+      streamOptions = options;
+      return new ReadableStream();
+    });
+    const persistedUserMessage = {
+      id: 44,
+      sessionId: 'session-1',
+      userId: 7,
+      role: 'user',
+      content: '分析附件',
+      parts: [{
+        type: 'file',
+        url: 'https://assets.example.test/retry-image.png',
+        mediaType: 'image/png',
+      }],
+      createdAt: new Date(),
+    };
+    const retryAsset = {
+      id: 55,
+      sessionId: 'session-1',
+      userId: 7,
+      assetPurpose: 'all',
+      status: 'failed',
+    };
+    const cancellation = new Error('stop after asset analysis assertion');
+    const messageRepo = {
+      find: jest.fn().mockResolvedValue([persistedUserMessage]),
+      findOne: jest.fn().mockResolvedValue(persistedUserMessage),
+      save: jest.fn(),
+    };
+    const assetRepo = {
+      find: jest.fn().mockResolvedValue([retryAsset]),
+    };
+    const assetAnalysisService = {
+      analyzePendingAssets: jest.fn().mockRejectedValue(cancellation),
+    };
+    const service = new (VideoService as any)(
+      {
+        findOne: jest.fn().mockResolvedValue({
+          sessionId: 'session-1',
+          userId: 7,
+          status: 'active',
+          productProfile: {},
+          topic: 'existing topic',
+        }),
+      },
+      messageRepo,
+      assetRepo,
+      { findOne: jest.fn().mockResolvedValue(null) },
+      { findOne: jest.fn().mockResolvedValue(null) },
+      {},
+      {},
+      {},
+      {},
+      assetAnalysisService,
+      {
+        runTotalAgent: jest.fn((context, work) => work(context.parentSignal)),
+      },
+    ) as VideoService;
+
+    await service.streamChat(
+      'session-1',
+      [uiUserMessage('retry-user-1')],
+      { userId: 7, retry: true },
+    );
+
+    await expect(
+      streamOptions.execute({ writer: { write: jest.fn() } }),
+    ).rejects.toBe(cancellation);
+
+    expect(messageRepo.save).not.toHaveBeenCalled();
+    expect(assetAnalysisService.analyzePendingAssets).toHaveBeenCalledWith(
+      'session-1',
+      [55],
+      expect.any(AbortSignal),
+      undefined,
+    );
   });
 
   it('does not persist an assistant message after an incomplete stream', async () => {

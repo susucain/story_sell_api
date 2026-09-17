@@ -633,6 +633,7 @@ export class VideoToolsService {
             this.taskService.createTaskByScriptId(script.id, {
               sessionId: ctx.sessionId,
               userId: ctx.userId,
+              signal: executionContext.abortSignal,
             }),
         );
 

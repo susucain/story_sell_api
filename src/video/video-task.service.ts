@@ -39,6 +39,7 @@ interface CreateTaskByScriptOptions {
   userId?: number;
   userPrompt?: string;
   assets?: GenerationAsset[];
+  signal?: AbortSignal;
 }
 
 interface FullVideoEditMeta {
@@ -150,7 +151,9 @@ export class VideoTaskService {
     videoUrls?: string[];
     duration?: number;
     ratio?: string;
+    signal?: AbortSignal;
   }) {
+    this.throwIfAborted(params.signal);
     const content: any[] = [{ type: 'text', text: params.prompt }];
 
     if (params.imageUrls && params.imageUrls.length > 0) {
@@ -194,14 +197,15 @@ export class VideoTaskService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify(requestBody),
+      signal: params.signal,
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`火山引擎API调用失败: ${response.status} ${errorText}`);
+      throw new Error(`视频生成服务请求失败: HTTP ${response.status}`);
     }
 
     const data = await response.json();
+    this.throwIfAborted(params.signal);
     this.logger.log(
       JSON.stringify({
         event: 'video_task_provider_response',
@@ -227,6 +231,7 @@ export class VideoTaskService {
       volcResponse: JSON.stringify(data),
     });
 
+    this.throwIfAborted(params.signal);
     await this.videoTaskRepo.save(task);
 
     return task;
@@ -236,6 +241,7 @@ export class VideoTaskService {
    * 通过脚本 ID 创建任务（Controller 调用）
    */
   async createTaskByScriptId(scriptId: number, options: CreateTaskByScriptOptions = {}) {
+    this.throwIfAborted(options.signal);
     const script = await this.scriptRepo.findOne({ where: { id: scriptId } });
     if (!script) {
       throw new Error(`脚本不存在: ${scriptId}`);
@@ -257,11 +263,13 @@ export class VideoTaskService {
         if (existing.assetPurpose === 'analysis') {
           existing.assetPurpose = 'all';
           existing.status = 'parsed';
+          this.throwIfAborted(options.signal);
           await this.assetRepo.save(existing);
         }
         continue;
       }
 
+      this.throwIfAborted(options.signal);
       await this.assetRepo.save(this.assetRepo.create({
         sessionId: script.sessionId,
         userId: script.userId,
@@ -295,6 +303,7 @@ export class VideoTaskService {
       ? `${script.seedancePrompt}\n\n## 本次生成补充要求\n${userPrompt}`
       : script.seedancePrompt;
 
+    this.throwIfAborted(options.signal);
     const task = await this.createTask({
       sessionId: script.sessionId,
       userId: script.userId,
@@ -307,8 +316,11 @@ export class VideoTaskService {
       videoUrls: [...new Set(videoUrls)],
       duration: fullVideoEdit?.sourceDurationSec,
       ratio: fullVideoEdit?.ratio,
+      signal: options.signal,
     });
+    this.throwIfAborted(options.signal);
     await this.markVideoGenerationStarted(script);
+    this.throwIfAborted(options.signal);
     await this.saveTaskEventMessage(task, 'video_generation_submitted');
     return task;
   }
@@ -417,8 +429,7 @@ export class VideoTaskService {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`取消/删除任务失败: ${response.status} ${errorText}`);
+      throw new Error(`视频生成服务取消失败: HTTP ${response.status}`);
     }
 
     if (task.status === 'queued') {
@@ -763,10 +774,15 @@ export class VideoTaskService {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`查询远程任务列表失败: ${response.status} ${errorText}`);
+      throw new Error(`视频生成服务查询失败: HTTP ${response.status}`);
     }
 
     return response.json();
+  }
+
+  private throwIfAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error('Video task request was aborted');
+    }
   }
 }

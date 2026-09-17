@@ -114,7 +114,24 @@ export class VideoService {
       persistedUserMessage = saved;
       currentMessageId = saved.id;
 
-      if (!options.retry) {
+      if (options.retry) {
+        const retryAssetUrls = (saved.parts ?? [])
+          .filter((part: any) => part.type === 'file' && typeof part.url === 'string')
+          .map((part: any) => part.url);
+        if (retryAssetUrls.length > 0) {
+          const retryAssets = await this.assetRepo.find({
+            where: {
+              sessionId,
+              userId,
+              url: In(retryAssetUrls),
+              assetPurpose: In(['analysis', 'all']),
+              status: In(['pending', 'failed']),
+            },
+            order: { createdAt: 'ASC' },
+          });
+          incomingAssetIds = retryAssets.map((asset) => asset.id);
+        }
+      } else {
         // 首条用户消息生成会话主题摘要，并刷新会话更新时间
         if (!session.topic && saved.content) {
           const topic = saved.content.replace(/\s+/g, ' ').trim().slice(0, 30);
