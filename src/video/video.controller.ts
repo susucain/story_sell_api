@@ -64,6 +64,7 @@ export class VideoController {
       session_id?: string;
       referenced_script_id?: number;
       source_video_asset_id?: number;
+      retry?: boolean;
     },
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
@@ -94,6 +95,7 @@ export class VideoController {
             ? res.locals.requestId
             : randomUUID(),
         onError: (error) => JSON.stringify(toVideoAgentError(error)),
+        retry: body.retry === true,
       },
     );
     pipeUIMessageStreamToResponse({ response: res as any, stream });

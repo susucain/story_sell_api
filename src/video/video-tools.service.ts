@@ -35,6 +35,10 @@ interface ToolContext {
   };
 }
 
+interface ToolExecutionContext {
+  abortSignal?: AbortSignal;
+}
+
 @Injectable()
 export class VideoToolsService {
   /** skills 目录绝对路径，作为 read_file / write_file 的沙箱根 */
@@ -93,7 +97,7 @@ export class VideoToolsService {
           toolName,
           {
             ...definition,
-            execute: async (...args: any[]) => {
+            execute: async (input: unknown, sdkContext: ToolExecutionContext) => {
               const run =
                 toolName === 'generate_script'
                   ? executionService.runScriptSave.bind(executionService)
@@ -106,7 +110,11 @@ export class VideoToolsService {
                   toolName,
                   parentSignal: context.parentSignal,
                 },
-                (signal) => execute(...args, { abortSignal: signal }),
+                (signal) =>
+                  execute(input, {
+                    ...sdkContext,
+                    abortSignal: signal,
+                  }),
               );
             },
           },
@@ -247,11 +255,18 @@ export class VideoToolsService {
           content: z.string().describe('要写入的文件内容'),
         }),
       ),
-      execute: async ({ path: relativePath, content }) => {
+      execute: async (
+        { path: relativePath, content },
+        executionContext: ToolExecutionContext = {},
+      ) => {
         try {
           const fullPath = this.resolveSkillPath(relativePath);
-          await fs.mkdir(path.dirname(fullPath), { recursive: true });
-          await fs.writeFile(fullPath, content, 'utf-8');
+          await this.runAbortAware(executionContext.abortSignal, () =>
+            fs.mkdir(path.dirname(fullPath), { recursive: true }),
+          );
+          await this.runAbortAware(executionContext.abortSignal, () =>
+            fs.writeFile(fullPath, content, 'utf-8'),
+          );
           return {
             path: relativePath,
             bytes: Buffer.byteLength(content, 'utf-8'),
@@ -285,7 +300,10 @@ export class VideoToolsService {
           tone: z.string().optional().describe('风格基调'),
         }),
       ),
-      execute: async (profile) => {
+      execute: async (
+        profile,
+        executionContext: ToolExecutionContext = {},
+      ) => {
         const session = await this.sessionRepo.findOne({
           where: { sessionId: ctx.sessionId },
         });
@@ -293,9 +311,13 @@ export class VideoToolsService {
           Object.entries(profile).filter(([, v]) => v !== undefined),
         );
         const merged = { ...(session?.productProfile || {}), ...incoming };
-        await this.sessionRepo.update(
-          { sessionId: ctx.sessionId },
-          { productProfile: merged },
+        await this.runAbortAware(
+          executionContext.abortSignal,
+          () =>
+            this.sessionRepo.update(
+              { sessionId: ctx.sessionId },
+              { productProfile: merged },
+            ),
         );
         return { success: true, profile: merged };
       },
@@ -354,7 +376,7 @@ export class VideoToolsService {
         storyboard_markdown,
         seedance_prompt,
         meta,
-      }) => {
+      }, executionContext: ToolExecutionContext = {}) => {
         if (ctx.waitingForUser || ctx.scriptUnchanged) {
           return {
             success: false,
@@ -509,6 +531,7 @@ export class VideoToolsService {
         }
         const nextVersion = await this.getNextVersion(ctx.sessionId);
 
+        this.throwIfAborted(executionContext.abortSignal);
         const script = this.scriptRepo.create({
           sessionId: ctx.sessionId,
           userId: ctx.userId,
@@ -527,10 +550,17 @@ export class VideoToolsService {
           status: 'draft',
         });
 
-        const saved = await this.scriptRepo.save(script);
-        await this.sessionRepo.update(
-          { sessionId: ctx.sessionId },
-          { status: 'script_generated' },
+        const saved = await this.runAbortAware(
+          executionContext.abortSignal,
+          () => this.scriptRepo.save(script),
+        );
+        await this.runAbortAware(
+          executionContext.abortSignal,
+          () =>
+            this.sessionRepo.update(
+              { sessionId: ctx.sessionId },
+              { status: 'script_generated' },
+            ),
         );
 
         return {
@@ -554,7 +584,10 @@ export class VideoToolsService {
           script_id: z.number(),
         }),
       ),
-      execute: async ({ script_id }) => {
+      execute: async (
+        { script_id },
+        executionContext: ToolExecutionContext = {},
+      ) => {
         if (ctx.waitingForUser) {
           return {
             success: false,
@@ -572,10 +605,14 @@ export class VideoToolsService {
           return { success: false, message: '脚本不存在或无权访问' };
         }
 
-        const task = await this.taskService.createTaskByScriptId(script.id, {
-          sessionId: ctx.sessionId,
-          userId: ctx.userId,
-        });
+        const task = await this.runAbortAware(
+          executionContext.abortSignal,
+          () =>
+            this.taskService.createTaskByScriptId(script.id, {
+              sessionId: ctx.sessionId,
+              userId: ctx.userId,
+            }),
+        );
 
         return {
           success: true,
@@ -884,6 +921,22 @@ export class VideoToolsService {
       order: { version: 'DESC' },
     });
     return (latest?.version ?? 0) + 1;
+  }
+
+  private throwIfAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error('Video agent execution was aborted');
+    }
+  }
+
+  private async runAbortAware<T>(
+    signal: AbortSignal | undefined,
+    mutation: () => Promise<T>,
+  ): Promise<T> {
+    this.throwIfAborted(signal);
+    const result = await mutation();
+    this.throwIfAborted(signal);
+    return result;
   }
 
   private toISOString(value: Date | null | undefined): string | null {

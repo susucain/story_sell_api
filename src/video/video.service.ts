@@ -91,6 +91,7 @@ export class VideoService {
       requestId?: string;
       parentSignal?: AbortSignal;
       onError?: (error: unknown) => string;
+      retry?: boolean;
     },
   ) {
     const session = await this.ensureSession(sessionId, options.userId);
@@ -99,49 +100,58 @@ export class VideoService {
     let currentMessageId: number | undefined;
     let incomingAssetIds: number[] = [];
     const lastUserMsg = messages.filter((m) => m.role === 'user').pop();
+    let persistedUserMessage: VideoMessage | undefined;
     if (lastUserMsg) {
-      const saved = await this.saveUserMessage(sessionId, userId, lastUserMsg);
+      const saved = options.retry
+        ? await this.findLatestUserMessage(sessionId, userId)
+        : await this.saveUserMessage(sessionId, userId, lastUserMsg);
+      if (!saved) {
+        throw new BadRequestException('没有可重试的用户消息');
+      }
+      persistedUserMessage = saved;
       currentMessageId = saved.id;
 
-      // 首条用户消息生成会话主题摘要，并刷新会话更新时间
-      if (!session.topic && saved.content) {
-        const topic = saved.content.replace(/\s+/g, ' ').trim().slice(0, 30);
-        await this.sessionRepo.update({ sessionId }, { topic });
-        session.topic = topic;
-      } else {
-        await this.touchSession(sessionId);
-      }
+      if (!options.retry) {
+        // 首条用户消息生成会话主题摘要，并刷新会话更新时间
+        if (!session.topic && saved.content) {
+          const topic = saved.content.replace(/\s+/g, ' ').trim().slice(0, 30);
+          await this.sessionRepo.update({ sessionId }, { topic });
+          session.topic = topic;
+        } else {
+          await this.touchSession(sessionId);
+        }
 
-      // 用户消息中的文件附件在发送时统一入库（前端上传/添加链接时不入库）。
-      // 素材必须先入库，才能在本轮预处理阶段并行解析。
-      const fileParts = (lastUserMsg.parts ?? []).filter(
-        (p: any) => p.type === 'file',
-      );
-      if (fileParts.length > 0) {
-        const incomingAssets = await Promise.all(
-          fileParts.map((part: any) => {
-            const mediaType: string = part.mediaType ?? '';
-            return this.createAsset(
-              {
-                session_id: sessionId,
-                asset_type: mediaType.startsWith('video/')
-                  ? 'video'
-                  : mediaType.startsWith('image/')
-                    ? 'image'
-                    : 'url',
-                asset_purpose: 'all',
-                name: part.filename ?? '附件素材',
-                url: part.url,
-                duration_sec:
-                  typeof part.durationSec === 'number'
-                    ? part.durationSec
-                    : undefined,
-              },
-              userId,
-            );
-          }),
+        // 用户消息中的文件附件在发送时统一入库（前端上传/添加链接时不入库）。
+        // 素材必须先入库，才能在本轮预处理阶段并行解析。
+        const fileParts = (lastUserMsg.parts ?? []).filter(
+          (p: any) => p.type === 'file',
         );
-        incomingAssetIds = incomingAssets.map((asset) => asset.id);
+        if (fileParts.length > 0) {
+          const incomingAssets = await Promise.all(
+            fileParts.map((part: any) => {
+              const mediaType: string = part.mediaType ?? '';
+              return this.createAsset(
+                {
+                  session_id: sessionId,
+                  asset_type: mediaType.startsWith('video/')
+                    ? 'video'
+                    : mediaType.startsWith('image/')
+                      ? 'image'
+                      : 'url',
+                  asset_purpose: 'all',
+                  name: part.filename ?? '附件素材',
+                  url: part.url,
+                  duration_sec:
+                    typeof part.durationSec === 'number'
+                      ? part.durationSec
+                      : undefined,
+                },
+                userId,
+              );
+            }),
+          );
+          incomingAssetIds = incomingAssets.map((asset) => asset.id);
+        }
       }
     }
 
@@ -173,7 +183,9 @@ export class VideoService {
 
     const allUiMessages = await this.buildModelContext(
       sessionId,
-      messages,
+      options.retry && persistedUserMessage
+        ? [this.toUIMessage(persistedUserMessage)]
+        : messages,
       referencedScript,
     );
     const modelMessages = await convertToModelMessages(
@@ -534,6 +546,31 @@ export class VideoService {
       createdAt: m.createdAt,
       metadata: m.metadata ?? undefined,
     })) as UIMessage[];
+  }
+
+  private async findLatestUserMessage(
+    sessionId: string,
+    userId: number,
+  ): Promise<VideoMessage | null> {
+    return this.messageRepo.findOne({
+      where: { sessionId, userId, role: 'user' },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  private toUIMessage(message: VideoMessage): UIMessage {
+    return {
+      id: String(message.id),
+      role: message.role as 'user' | 'assistant',
+      content: message.content || '',
+      parts: (message.parts?.length
+        ? message.parts
+        : [
+            { type: 'text', text: message.content || '' },
+          ]) as unknown as UIMessage['parts'],
+      createdAt: message.createdAt,
+      metadata: message.metadata ?? undefined,
+    } as UIMessage;
   }
 
   private async buildModelContext(
