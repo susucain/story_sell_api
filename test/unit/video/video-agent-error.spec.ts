@@ -1,6 +1,7 @@
 jest.mock('ai', () => ({
   ToolLoopAgent: class {},
   createUIMessageStream: jest.fn(),
+  pipeUIMessageStreamToResponse: jest.fn(),
   convertToModelMessages: jest.fn().mockResolvedValue([]),
   getToolName: jest.fn(),
   isStepCount: jest.fn(),
@@ -15,7 +16,11 @@ jest.mock('@ai-sdk/openai-compatible', () => ({
 
 import { createUIMessageStream } from 'ai';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter } from 'node:events';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { toVideoAgentError } from '../../../src/video/video.controller';
+import { VideoController } from '../../../src/video/video.controller';
 import {
   VideoAgentExecutionService,
   VideoAgentTimeoutError,
@@ -27,6 +32,60 @@ const mockedCreateUIMessageStream =
   createUIMessageStream as jest.MockedFunction<typeof createUIMessageStream>;
 
 describe('video agent stream errors', () => {
+  it('passes a client disconnect signal to chat work but ignores a normally finished response close', async () => {
+    const streamChat = jest.fn().mockResolvedValue(new ReadableStream());
+    const controller = new VideoController(
+      { streamChat } as any,
+      {} as any,
+    );
+    const request = new EventEmitter() as any;
+    const response = Object.assign(new EventEmitter(), {
+      locals: { requestId: 'request-1' },
+      writableEnded: false,
+    }) as any;
+
+    await (controller as any).chat(
+      { messages: [uiUserMessage('user-1')] },
+      { id: 7 },
+      request,
+      response,
+    );
+
+    const parentSignal = streamChat.mock.calls[0][2].parentSignal as AbortSignal;
+    request.emit('aborted');
+    expect(parentSignal.aborted).toBe(true);
+
+    const finishedRequest = new EventEmitter() as any;
+    const finishedResponse = Object.assign(new EventEmitter(), {
+      locals: { requestId: 'request-2' },
+      writableEnded: true,
+    }) as any;
+    await (controller as any).chat(
+      { messages: [uiUserMessage('user-2')] },
+      { id: 7 },
+      finishedRequest,
+      finishedResponse,
+    );
+
+    const finishedSignal = streamChat.mock.calls[1][2]
+      .parentSignal as AbortSignal;
+    finishedResponse.emit('close');
+    expect(finishedSignal.aborted).toBe(false);
+  });
+
+  it('does not configure video telemetry or error logs with raw model content', async () => {
+    const source = await fs.readFile(
+      path.resolve(__dirname, '../../../src/video/video.service.ts'),
+      'utf8',
+    );
+
+    expect(source).not.toContain('langfuse.trace.input');
+    expect(source).toContain('recordInputs: false');
+    expect(source).toContain('recordOutputs: false');
+    expect(source).not.toContain('err.message');
+    expect(source).not.toContain('err.stack');
+  });
+
   it('serializes typed timeouts without provider details', () => {
     const error = toVideoAgentError(
       new VideoAgentTimeoutError('AGENT_TOTAL_TIMEOUT', 'agent_total', 300000),
@@ -504,6 +563,89 @@ describe('video agent stream errors', () => {
       isAborted: false,
     });
 
+    expect(messageRepo.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops request work on parent cancellation and does not persist an assistant message', async () => {
+    let streamOptions: any;
+    mockedCreateUIMessageStream.mockImplementation((options: any) => {
+      streamOptions = options;
+      return new ReadableStream();
+    });
+    const session = {
+      sessionId: 'session-1',
+      userId: 7,
+      status: 'active',
+      productProfile: {},
+      topic: 'existing topic',
+    };
+    const sessionRepo = {
+      findOne: jest.fn().mockResolvedValue(session),
+      update: jest.fn(),
+      createQueryBuilder: jest.fn(() => ({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn(),
+      })),
+    };
+    const messageRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn().mockResolvedValue({ id: 3, content: '生成分镜' }),
+    };
+    const parent = new AbortController();
+    const cancellation = new Error('client disconnected');
+    const assetAnalysisService = {
+      analyzePendingAssets: jest.fn(
+        (_sessionId, _assetIds, signal: AbortSignal) =>
+          new Promise((_, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), {
+              once: true,
+            });
+          }),
+      ),
+    };
+    const service = new (VideoService as any)(
+      sessionRepo,
+      messageRepo,
+      { find: jest.fn().mockResolvedValue([]) },
+      { findOne: jest.fn().mockResolvedValue(null) },
+      { findOne: jest.fn().mockResolvedValue(null) },
+      {},
+      {},
+      {},
+      {},
+      assetAnalysisService,
+      {
+        runTotalAgent: jest.fn((context, work) => work(context.parentSignal)),
+      },
+    ) as VideoService;
+
+    await service.streamChat(
+      'session-1',
+      [uiUserMessage('user-1')],
+      { userId: 7, parentSignal: parent.signal },
+    );
+    const execution = streamOptions.execute({ writer: { write: jest.fn() } });
+    await Promise.resolve();
+    parent.abort(cancellation);
+
+    await expect(execution).rejects.toBe(cancellation);
+    await streamOptions.onEnd({
+      messages: [{
+        id: 'assistant-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: '不应持久化' }],
+      }],
+      isAborted: true,
+    });
+
+    expect(assetAnalysisService.analyzePendingAssets).toHaveBeenCalledWith(
+      'session-1',
+      [],
+      parent.signal,
+      undefined,
+    );
     expect(messageRepo.save).toHaveBeenCalledTimes(1);
   });
 });

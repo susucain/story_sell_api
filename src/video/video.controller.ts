@@ -6,6 +6,7 @@ import {
   Delete,
   Patch,
   Body,
+  Req,
   Res,
   Param,
   Query,
@@ -16,7 +17,7 @@ import { VideoService } from './video.service';
 import { VideoTaskService } from './video-task.service';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import { UIMessage } from 'ai';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { Observable } from 'rxjs';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -77,6 +78,7 @@ export class VideoController {
       retry?: boolean;
     },
     @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
     if (!body.messages || !Array.isArray(body.messages)) {
@@ -90,6 +92,31 @@ export class VideoController {
         );
       }
     }
+
+    const disconnectController = new AbortController();
+    const abortForDisconnect = () => {
+      if (!disconnectController.signal.aborted) {
+        disconnectController.abort(new Error('Video chat client disconnected'));
+      }
+    };
+    const cleanupDisconnectListeners = () => {
+      req.removeListener('aborted', onRequestAborted);
+      res.removeListener('close', onResponseClose);
+      res.removeListener('finish', cleanupDisconnectListeners);
+    };
+    const onRequestAborted = () => {
+      abortForDisconnect();
+      cleanupDisconnectListeners();
+    };
+    const onResponseClose = () => {
+      if (!res.writableEnded) {
+        abortForDisconnect();
+      }
+      cleanupDisconnectListeners();
+    };
+    req.once('aborted', onRequestAborted);
+    res.once('close', onResponseClose);
+    res.once('finish', cleanupDisconnectListeners);
 
     const sessionId = body.session_id ?? randomUUID();
     const latestMessage = body.messages[body.messages.length - 1];
@@ -106,9 +133,10 @@ export class VideoController {
             : randomUUID(),
         onError: (error) => JSON.stringify(toVideoAgentError(error)),
         retry: body.retry === true,
+        parentSignal: disconnectController.signal,
       },
     );
-    pipeUIMessageStreamToResponse({ response: res as any, stream });
+    void pipeUIMessageStreamToResponse({ response: res, stream });
   }
 
   @Get('history/:sessionId')

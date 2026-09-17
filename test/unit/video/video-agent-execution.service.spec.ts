@@ -239,7 +239,7 @@ describe('VideoAgentExecutionService', () => {
     process.env.VIDEO_AGENT_TOOL_TIMEOUT_MS = '125';
     process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS = '126';
     process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = '127';
-    process.env.VIDEO_AGENT_ASSET_ANALYSIS_CONCURRENCY = '4';
+    process.env.VIDEO_AGENT_ASSET_ANALYSIS_CONCURRENCY = '3';
 
     const overridden = createService();
 
@@ -248,7 +248,7 @@ describe('VideoAgentExecutionService', () => {
     expect(overridden.toolTimeoutMs).toBe(125);
     expect(overridden.scriptSaveTimeoutMs).toBe(126);
     expect(overridden.totalTimeoutMs).toBe(127);
-    expect(overridden.assetAnalysisConcurrency).toBe(4);
+    expect(overridden.assetAnalysisConcurrency).toBe(3);
   });
 
   it('rejects non-positive integer environment values', () => {
@@ -256,6 +256,14 @@ describe('VideoAgentExecutionService', () => {
 
     expect(createService).toThrow(
       'VIDEO_AGENT_TOOL_TIMEOUT_MS must be a positive integer.',
+    );
+  });
+
+  it('rejects asset analysis concurrency above three', () => {
+    process.env.VIDEO_AGENT_ASSET_ANALYSIS_CONCURRENCY = '4';
+
+    expect(createService).toThrow(
+      'VIDEO_AGENT_ASSET_ANALYSIS_CONCURRENCY must be a positive integer no greater than 3.',
     );
   });
 

@@ -13,7 +13,6 @@ import {
   createUIMessageStream,
   convertToModelMessages,
   isStepCount,
-  ModelMessage,
   isToolUIPart,
   getToolName,
 } from 'ai';
@@ -32,6 +31,7 @@ import { assertAgentFinalReply } from './agent-reply.validation';
 import {
   VideoAgentExecutionService,
   VideoAgentMutationState,
+  VideoAgentTimeoutError,
 } from './video-agent-execution.service';
 
 const RECENT_MESSAGE_LIMIT = 6;
@@ -297,11 +297,6 @@ export class VideoService {
             'langfuse.trace.tags',
             JSON.stringify(['video-storyboard']),
           );
-          rootSpan.setAttribute(
-            'langfuse.trace.input',
-            JSON.stringify({ sessionId, messages: modelMessages }),
-          );
-
           try {
             await context.with(
               trace.setSpan(context.active(), rootSpan),
@@ -314,8 +309,8 @@ export class VideoService {
                   telemetry: {
                     isEnabled: true,
                     functionId: 'video-storyboard-chat',
-                    recordInputs: true,
-                    recordOutputs: true,
+                    recordInputs: false,
+                    recordOutputs: false,
                   },
                 });
 
@@ -357,20 +352,25 @@ export class VideoService {
                   }
                   writer.write(chunk);
                 }
-                rootSpan.setAttribute(
-                  'langfuse.trace.output',
-                  JSON.stringify({ reply: replyText.join('') }),
-                );
                 assertAgentFinalReply(replyText.join(''));
                 tracker.finish();
                 completed = true;
               },
             );
-          } catch (err: any) {
-            this.logger.error(`创作过程流异常: ${err.message}`, err.stack);
-            rootSpan.recordException(err);
+          } catch (error: unknown) {
+            this.logger.error(
+              JSON.stringify({
+                requestId: options.requestId,
+                sessionId,
+                phase: 'agent_stream',
+                errorCode:
+                  error instanceof VideoAgentTimeoutError
+                    ? error.code
+                    : 'VIDEO_AGENT_ERROR',
+              }),
+            );
             tracker.error();
-            throw err;
+            throw error;
           } finally {
             rootSpan.end();
           }

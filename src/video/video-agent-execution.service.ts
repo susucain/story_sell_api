@@ -94,6 +94,7 @@ export class VideoAgentExecutionService {
       configService,
       'VIDEO_AGENT_ASSET_ANALYSIS_CONCURRENCY',
       DEFAULTS.assetAnalysisConcurrency,
+      DEFAULTS.assetAnalysisConcurrency,
     );
   }
 
@@ -288,6 +289,7 @@ export class VideoAgentExecutionService {
     configService: ConfigService,
     key: string,
     defaultValue: number,
+    maxValue = MAX_TIMER_DELAY_MS,
   ): number {
     const value = configService.get<string | number | undefined>(key);
     if (value === undefined) {
@@ -299,9 +301,13 @@ export class VideoAgentExecutionService {
       (typeof value === 'string' && !/^[1-9]\d*$/.test(value)) ||
       !Number.isSafeInteger(parsed) ||
       parsed <= 0 ||
-      parsed > MAX_TIMER_DELAY_MS
+      parsed > maxValue
     ) {
-      throw new Error(`${key} must be a positive integer.`);
+      const constraint =
+        maxValue === MAX_TIMER_DELAY_MS
+          ? 'must be a positive integer.'
+          : `must be a positive integer no greater than ${maxValue}.`;
+      throw new Error(`${key} ${constraint}`);
     }
 
     return parsed;
