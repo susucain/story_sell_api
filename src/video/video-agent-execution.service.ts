@@ -14,6 +14,8 @@ export class VideoAgentTimeoutError extends Error {
     readonly code: VideoAgentTimeoutCode,
     readonly phase: string,
     readonly durationMs: number,
+    readonly toolName?: string,
+    readonly sideEffectStarted = false,
   ) {
     super(`Video agent phase "${phase}" exceeded its deadline.`);
     this.name = 'VideoAgentTimeoutError';
@@ -26,6 +28,11 @@ export interface VideoAgentPhaseContext {
   toolName?: string;
   assetId?: number | string;
   parentSignal?: AbortSignal;
+  mutationState?: VideoAgentMutationState;
+}
+
+export interface VideoAgentMutationState {
+  sideEffectStarted: boolean;
 }
 
 export interface VideoAgentPhaseOptions extends VideoAgentPhaseContext {
@@ -183,7 +190,9 @@ export class VideoAgentExecutionService {
 
     const onParentAbort = () => {
       if (!controller.signal.aborted) {
-        controller.abort(options.parentSignal?.reason);
+        controller.abort(
+          this.withMutationState(options.parentSignal?.reason, options),
+        );
       }
     };
 
@@ -215,6 +224,8 @@ export class VideoAgentExecutionService {
         options.timeoutCode,
         options.phase,
         options.timeoutMs,
+        options.toolName,
+        options.mutationState?.sideEffectStarted ?? false,
       );
       controller.abort(timeoutError);
     }, options.timeoutMs);
@@ -294,6 +305,25 @@ export class VideoAgentExecutionService {
     }
 
     return parsed;
+  }
+
+  private withMutationState(
+    error: unknown,
+    options: VideoAgentPhaseOptions,
+  ): unknown {
+    if (
+      error instanceof VideoAgentTimeoutError &&
+      options.mutationState?.sideEffectStarted
+    ) {
+      return new VideoAgentTimeoutError(
+        error.code,
+        error.phase,
+        error.durationMs,
+        options.toolName ?? error.toolName,
+        true,
+      );
+    }
+    return error;
   }
 
   private log(

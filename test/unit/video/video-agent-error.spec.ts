@@ -39,6 +39,54 @@ describe('video agent stream errors', () => {
     expect(JSON.stringify(error)).not.toContain('agent_total');
   });
 
+  it('serializes a timeout after script persistence begins as a non-retryable status-unknown outcome', () => {
+    const timeout = Object.assign(
+      new VideoAgentTimeoutError('TOOL_TIMEOUT', 'script_save', 45000),
+      {
+        toolName: 'generate_script',
+        sideEffectStarted: true,
+      },
+    );
+
+    expect(toVideoAgentError(timeout)).toEqual({
+      code: 'OPERATION_STATUS_UNKNOWN',
+      retryable: false,
+      message: '操作状态未知，请刷新查看结果',
+    });
+  });
+
+  it('serializes a timeout after video-task submission begins as a non-retryable status-unknown outcome', () => {
+    const timeout = Object.assign(
+      new VideoAgentTimeoutError('TOOL_TIMEOUT', 'tool', 30000),
+      {
+        toolName: 'create_video_task',
+        sideEffectStarted: true,
+      },
+    );
+
+    expect(toVideoAgentError(timeout)).toEqual({
+      code: 'OPERATION_STATUS_UNKNOWN',
+      retryable: false,
+      message: '操作状态未知，请刷新查看结果',
+    });
+  });
+
+  it('keeps a total timeout before a mutation retryable', () => {
+    const timeout = Object.assign(
+      new VideoAgentTimeoutError('AGENT_TOTAL_TIMEOUT', 'agent_total', 300000),
+      {
+        toolName: 'create_video_task',
+        sideEffectStarted: false,
+      },
+    );
+
+    expect(toVideoAgentError(timeout)).toEqual({
+      code: 'AGENT_TOTAL_TIMEOUT',
+      retryable: true,
+      message: '创作请求超时，请重试',
+    });
+  });
+
   it('uses the script-save deadline for generate_script', async () => {
     const timeout = new VideoAgentTimeoutError(
       'TOOL_TIMEOUT',

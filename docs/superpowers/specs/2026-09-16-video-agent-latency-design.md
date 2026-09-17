@@ -3,7 +3,7 @@
 ## Goal
 
 Reduce video-agent latency for multi-asset requests and make stalled work fail
-predictably with an actionable, retryable error.
+predictably with an actionable client outcome.
 
 ## Scope
 
@@ -83,7 +83,12 @@ A model or tool timeout cancels the active agent request and returns one of:
 - `ASSET_PARSE_TIMEOUT`
 - `AGENT_TOTAL_TIMEOUT`
 
-These errors are retryable. An incomplete assistant message is not persisted.
+Timeouts before a side effect starts remain retryable. Once a tool mutation has
+started, the result may be uncertain because TypeORM cannot reliably cancel an
+in-flight query. Those requests return the non-retryable
+`OPERATION_STATUS_UNKNOWN` outcome with `操作状态未知，请刷新查看结果`; the client
+must refresh persisted state rather than resubmit. An incomplete assistant
+message is not persisted.
 
 ## Observability
 
@@ -108,7 +113,8 @@ Unit tests will prove:
 
 - Asset analysis observes the concurrency cap and continues after an
   independent asset failure.
-- Timeouts abort downstream work and map to the correct retryable error code.
+- Timeouts before mutations remain retryable; post-mutation timeouts map to a
+  non-retryable status-unknown outcome.
 - The base prompt excludes the full skill content and routes each task to the
   necessary references.
 - Sensitive prompt and URL content does not appear in latency logs.

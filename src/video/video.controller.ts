@@ -28,13 +28,23 @@ import {
 } from './video-agent-execution.service';
 
 export interface VideoAgentClientError {
-  code: VideoAgentTimeoutCode | 'VIDEO_AGENT_ERROR';
+  code:
+    | VideoAgentTimeoutCode
+    | 'OPERATION_STATUS_UNKNOWN'
+    | 'VIDEO_AGENT_ERROR';
   retryable: boolean;
   message: string;
 }
 
 export function toVideoAgentError(error: unknown): VideoAgentClientError {
   if (error instanceof VideoAgentTimeoutError) {
+    if (error.sideEffectStarted) {
+      return {
+        code: 'OPERATION_STATUS_UNKNOWN',
+        retryable: false,
+        message: '操作状态未知，请刷新查看结果',
+      };
+    }
     return {
       code: error.code,
       retryable: true,

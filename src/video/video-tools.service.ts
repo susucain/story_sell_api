@@ -18,7 +18,10 @@ import {
   validateAvatarOutfitSelection,
 } from './avatar-catalog';
 import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
-import { VideoAgentExecutionService } from './video-agent-execution.service';
+import {
+  VideoAgentExecutionService,
+  VideoAgentMutationState,
+} from './video-agent-execution.service';
 
 interface ToolContext {
   requestId?: string;
@@ -37,6 +40,7 @@ interface ToolContext {
 
 interface ToolExecutionContext {
   abortSignal?: AbortSignal;
+  mutationState?: VideoAgentMutationState;
 }
 
 @Injectable()
@@ -98,6 +102,9 @@ export class VideoToolsService {
           {
             ...definition,
             execute: async (input: unknown, sdkContext: ToolExecutionContext) => {
+              const mutationState: VideoAgentMutationState = {
+                sideEffectStarted: false,
+              };
               const run =
                 toolName === 'generate_script'
                   ? executionService.runScriptSave.bind(executionService)
@@ -109,11 +116,13 @@ export class VideoToolsService {
                   sessionId: context.sessionId,
                   toolName,
                   parentSignal: context.parentSignal,
+                  mutationState,
                 },
                 (signal) =>
                   execute(input, {
                     ...sdkContext,
                     abortSignal: signal,
+                    mutationState,
                   }),
               );
             },
@@ -261,10 +270,10 @@ export class VideoToolsService {
       ) => {
         try {
           const fullPath = this.resolveSkillPath(relativePath);
-          await this.runAbortAware(executionContext.abortSignal, () =>
+          await this.runAbortAware(executionContext, () =>
             fs.mkdir(path.dirname(fullPath), { recursive: true }),
           );
-          await this.runAbortAware(executionContext.abortSignal, () =>
+          await this.runAbortAware(executionContext, () =>
             fs.writeFile(fullPath, content, 'utf-8'),
           );
           return {
@@ -312,7 +321,7 @@ export class VideoToolsService {
         );
         const merged = { ...(session?.productProfile || {}), ...incoming };
         await this.runAbortAware(
-          executionContext.abortSignal,
+          executionContext,
           () =>
             this.sessionRepo.update(
               { sessionId: ctx.sessionId },
@@ -551,11 +560,11 @@ export class VideoToolsService {
         });
 
         const saved = await this.runAbortAware(
-          executionContext.abortSignal,
+          executionContext,
           () => this.scriptRepo.save(script),
         );
         await this.runAbortAware(
-          executionContext.abortSignal,
+          executionContext,
           () =>
             this.sessionRepo.update(
               { sessionId: ctx.sessionId },
@@ -606,7 +615,7 @@ export class VideoToolsService {
         }
 
         const task = await this.runAbortAware(
-          executionContext.abortSignal,
+          executionContext,
           () =>
             this.taskService.createTaskByScriptId(script.id, {
               sessionId: ctx.sessionId,
@@ -930,12 +939,15 @@ export class VideoToolsService {
   }
 
   private async runAbortAware<T>(
-    signal: AbortSignal | undefined,
+    executionContext: ToolExecutionContext,
     mutation: () => Promise<T>,
   ): Promise<T> {
-    this.throwIfAborted(signal);
+    this.throwIfAborted(executionContext.abortSignal);
+    if (executionContext.mutationState) {
+      executionContext.mutationState.sideEffectStarted = true;
+    }
     const result = await mutation();
-    this.throwIfAborted(signal);
+    this.throwIfAborted(executionContext.abortSignal);
     return result;
   }
 

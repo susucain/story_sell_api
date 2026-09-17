@@ -27,7 +27,7 @@
 - Create: `src/video/skills/life-service-storyboard-generator/character.md`
 - Create: `src/video/skills/life-service-storyboard-generator/storyboard.md`
 - Create: `src/video/skills/life-service-storyboard-generator/seedance.md`
-- Modify: `src/video/video.controller.ts` - Map typed agent failures to a structured retryable stream error.
+- Modify: `src/video/video.controller.ts` - Map typed agent failures to retryable pre-mutation errors or a non-retryable status-unknown stream outcome after a mutation starts.
 - Modify: `src/main.ts` - Emit request IDs and make them available to the video request context.
 - Modify: `env.prod.example` - Document all timeout and analysis concurrency variables.
 - Modify: `agui-frontend/nginx.conf` - Raise `/ai` and `/video` proxy read timeouts to 330 seconds.
@@ -354,11 +354,11 @@ Create one request-level `AbortController` in `VideoService.streamChat`, with th
 - All other tools with the 30-second tool deadline.
 - The outer request with `AGENT_TOTAL_TIMEOUT`.
 
-When cancellation occurs, stop writing chunks, call `tracker.error()` with a generic retryable message, and do not call `saveAssistantUIMessage`.
+When cancellation occurs, stop writing chunks, do not call `saveAssistantUIMessage`, and classify the stream error by side-effect safety: pre-mutation timeouts are retryable; timeouts after a tool mutation starts return `OPERATION_STATUS_UNKNOWN` and require a refresh.
 
 - [ ] **Step 4: Add request correlation and safe client error presentation**
 
-In `main.ts`, attach a UUID request ID to each request and response header. Carry it into the video service context and logs. In the controller, translate `VideoAgentTimeoutError` to the structured code and generic Chinese message before writing the stream error. In `VideoStoryboard/index.tsx`, map retryable timeout codes to a visible retry button that resubmits the unchanged latest user input; keep the generic close action for other errors.
+In `main.ts`, attach a UUID request ID to each request and response header. Carry it into the video service context and logs. In the controller, translate `VideoAgentTimeoutError` to a retryable error before mutation or `OPERATION_STATUS_UNKNOWN` after a mutation starts. In `VideoStoryboard/index.tsx`, map retryable timeout codes to a retry button and status-unknown outcomes to a refresh action.
 
 - [ ] **Step 5: Update Nginx timeout**
 
@@ -395,7 +395,7 @@ Expected: all tests pass and both applications build successfully.
 1. Send a five-image storyboard request.
 2. Confirm three asset-analysis phase logs start before any finishes.
 3. Confirm every log shares the request ID and excludes prompt text and URLs.
-4. Confirm a controlled timeout returns the retryable message before 330 seconds.
+4. Confirm a controlled pre-mutation timeout returns the retryable message before 330 seconds, while a timeout after a mutation starts returns the status-unknown refresh message.
 5. Confirm a normal storyboard request persists an assistant message and script.
 
 - [ ] **Step 8: Commit**
@@ -410,5 +410,5 @@ git commit -m "feat: bound and observe video agent execution"
 ## Plan Self-Review
 
 - Scope coverage: Task 1 supplies configured timeouts, cancellation primitives, and redacted logs. Task 2 provides real parallel visual analysis. Task 3 removes fixed prompt bloat and retains on-demand constraints. Task 4 propagates failures to the client and aligns the proxy deadline.
-- Type consistency: all timeout paths use `VideoAgentTimeoutError` and the same four public codes. Asset results use existing `VideoAsset.status` values `parsed` and `failed`.
+- Type consistency: all timeout paths use `VideoAgentTimeoutError`; public stream codes include the four timeout codes plus `OPERATION_STATUS_UNKNOWN` after a mutation starts. Asset results use existing `VideoAsset.status` values `parsed` and `failed`.
 - Deployment boundary: backend code and frontend Nginx configuration deploy independently through their existing pipelines; production verification occurs only after both are deployed.
