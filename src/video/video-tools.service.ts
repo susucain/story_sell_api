@@ -21,6 +21,7 @@ import { SeedancePromptValidatorService } from './seedance-prompt-validator.serv
 import {
   VideoAgentExecutionService,
   VideoAgentMutationState,
+  VideoAgentTimeoutError,
 } from './video-agent-execution.service';
 
 interface ToolContext {
@@ -33,6 +34,7 @@ interface ToolContext {
   scriptUnchanged?: boolean;
   parentSignal?: AbortSignal;
   mutationState?: VideoAgentMutationState;
+  abortRequest?: (reason: VideoAgentTimeoutError) => void;
   fullVideoEdit?: {
     sourceAssetId: number;
     sourceDurationSec: number;
@@ -111,21 +113,31 @@ export class VideoToolsService {
                   ? executionService.runScriptSave.bind(executionService)
                   : executionService.runTool.bind(executionService);
 
-              return run(
-                {
-                  requestId: context.requestId,
-                  sessionId: context.sessionId,
-                  toolName,
-                  parentSignal: context.parentSignal,
-                  mutationState,
-                },
-                (signal) =>
-                  execute(input, {
-                    ...sdkContext,
-                    abortSignal: signal,
+              try {
+                return await run(
+                  {
+                    requestId: context.requestId,
+                    sessionId: context.sessionId,
+                    toolName,
+                    parentSignal: context.parentSignal,
                     mutationState,
-                  }),
-              );
+                  },
+                  (signal) =>
+                    execute(input, {
+                      ...sdkContext,
+                      abortSignal: signal,
+                      mutationState,
+                    }),
+                );
+              } catch (error) {
+                if (
+                  error instanceof VideoAgentTimeoutError &&
+                  error.code === 'TOOL_TIMEOUT'
+                ) {
+                  context.abortRequest?.(error);
+                }
+                throw error;
+              }
             },
           },
         ];

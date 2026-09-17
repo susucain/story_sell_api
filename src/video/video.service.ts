@@ -197,6 +197,22 @@ export class VideoService {
     const requestMutationState: VideoAgentMutationState = {
       sideEffectStarted: false,
     };
+    const requestController = new AbortController();
+    const abortRequest = (reason: unknown) => {
+      if (!requestController.signal.aborted) {
+        requestController.abort(reason);
+      }
+    };
+    const onParentAbort = () => abortRequest(options.parentSignal?.reason);
+    if (options.parentSignal) {
+      if (options.parentSignal.aborted) {
+        onParentAbort();
+      } else {
+        options.parentSignal.addEventListener('abort', onParentAbort, {
+          once: true,
+        });
+      }
+    }
     let completed = false;
 
     return createUIMessageStream({
@@ -261,6 +277,7 @@ export class VideoService {
             currentMessageId,
             parentSignal: totalSignal,
             mutationState: requestMutationState,
+            abortRequest,
             referencedVersion: referencedScript?.version,
             fullVideoEdit: sourceVideoAsset
               ? {
@@ -359,15 +376,19 @@ export class VideoService {
           }
         };
 
-        await this.executionService.runTotalAgent(
-          {
-            requestId: options.requestId,
-            sessionId,
-            parentSignal: options.parentSignal,
-            mutationState: requestMutationState,
-          },
-          execute,
-        );
+        try {
+          await this.executionService.runTotalAgent(
+            {
+              requestId: options.requestId,
+              sessionId,
+              parentSignal: requestController.signal,
+              mutationState: requestMutationState,
+            },
+            execute,
+          );
+        } finally {
+          options.parentSignal?.removeEventListener('abort', onParentAbort);
+        }
       },
       onEnd: async ({ messages: finalMessages }) => {
         if (!completed) {

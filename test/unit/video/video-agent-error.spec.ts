@@ -162,6 +162,93 @@ describe('video agent stream errors', () => {
     }
   });
 
+  it('aborts the shared request after a script-save timeout and reports status unknown', async () => {
+    jest.useFakeTimers();
+    const previousToolTimeout = process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS;
+    const previousTotalTimeout = process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS;
+    process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS = '5';
+    process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = '100';
+
+    try {
+      const executionService = new VideoAgentExecutionService(
+        new ConfigService(),
+      );
+      const requestController = new AbortController();
+      const mutationState = { sideEffectStarted: false };
+      let totalSignal: AbortSignal | undefined;
+      const scriptRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn((value) => value),
+        save: jest.fn(() => new Promise(() => undefined)),
+      };
+      const tools = new (VideoToolsService as any)(
+        {},
+        scriptRepo,
+        { update: jest.fn() },
+        {},
+        {
+          parse: jest.fn(() => ({
+            hook: '商品介绍',
+            shots: [{ shot: 1 }],
+            meta: {},
+          })),
+        },
+        {},
+        {
+          normalize: jest.fn((prompt) => ({ prompt, changes: [] })),
+          validate: jest.fn(() => ({ errors: [], warnings: [] })),
+        },
+        executionService,
+      ).buildTools({
+        sessionId: 'session-1',
+        userId: 7,
+        mutationState,
+        abortRequest: (reason: Error) => requestController.abort(reason),
+      } as any);
+
+      const pending = executionService.runTotalAgent(
+        {
+          sessionId: 'session-1',
+          parentSignal: requestController.signal,
+          mutationState,
+        },
+        (signal) => {
+          totalSignal = signal;
+          return tools.generate_script.execute(scriptInput(), {
+            abortSignal: signal,
+          });
+        },
+      );
+      const result = pending.catch((reason) => reason);
+      for (let index = 0; index < 10; index += 1) {
+        await Promise.resolve();
+      }
+
+      await jest.advanceTimersByTimeAsync(5);
+      const error = await result;
+
+      expect(requestController.signal.aborted).toBe(true);
+      expect(totalSignal?.aborted).toBe(true);
+      expect(toVideoAgentError(error)).toEqual({
+        code: 'OPERATION_STATUS_UNKNOWN',
+        retryable: false,
+        message: '操作状态未知，请刷新查看结果',
+      });
+    } finally {
+      if (previousToolTimeout === undefined) {
+        delete process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS;
+      } else {
+        process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS = previousToolTimeout;
+      }
+      if (previousTotalTimeout === undefined) {
+        delete process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS;
+      } else {
+        process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = previousTotalTimeout;
+      }
+      jest.useRealTimers();
+    }
+  });
+
   it('uses the script-save deadline for generate_script', async () => {
     const timeout = new VideoAgentTimeoutError(
       'TOOL_TIMEOUT',
