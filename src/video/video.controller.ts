@@ -87,9 +87,7 @@ export class VideoController {
 
     for (const msg of body.messages) {
       if (!msg.parts || !Array.isArray(msg.parts)) {
-        throw new Error(
-          `Invalid message format: message must have 'parts' array. Got: ${JSON.stringify(msg)}`,
-        );
+        throw new Error('Invalid message format');
       }
     }
 

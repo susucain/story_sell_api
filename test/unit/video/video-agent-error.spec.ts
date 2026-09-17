@@ -73,6 +73,42 @@ describe('video agent stream errors', () => {
     expect(finishedSignal.aborted).toBe(false);
   });
 
+  it('does not include malformed message content in validation errors', async () => {
+    const controller = new VideoController({} as any, {} as any);
+    const request = new EventEmitter() as any;
+    const response = Object.assign(new EventEmitter(), {
+      locals: { requestId: 'request-1' },
+      writableEnded: false,
+    }) as any;
+
+    await expect(
+      (controller as any).chat(
+        {
+          messages: [{
+            role: 'user',
+            secret: 'https://assets.example.test/private.png',
+          }],
+        },
+        { id: 7 },
+        request,
+        response,
+      ),
+    ).rejects.toThrow('Invalid message format');
+    await expect(
+      (controller as any).chat(
+        {
+          messages: [{
+            role: 'user',
+            secret: 'https://assets.example.test/private.png',
+          }],
+        },
+        { id: 7 },
+        request,
+        response,
+      ),
+    ).rejects.not.toThrow('private.png');
+  });
+
   it('does not configure video telemetry or error logs with raw model content', async () => {
     const source = await fs.readFile(
       path.resolve(__dirname, '../../../src/video/video.service.ts'),

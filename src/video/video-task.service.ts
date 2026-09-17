@@ -178,7 +178,16 @@ export class VideoTaskService {
 
     requestBody.callback_url = this.getCallbackUrl();
 
-    this.logger.log(`创建视频生成任务: ${JSON.stringify(requestBody)}`);
+    this.logger.log(
+      JSON.stringify({
+        event: 'video_task_submit',
+        model: this.apiModel,
+        duration,
+        ratio,
+        imageCount: params.imageUrls?.length ?? 0,
+        videoCount: params.videoUrls?.length ?? 0,
+      }),
+    );
 
     const response = await fetch(this.apiUrl, {
     // const response = await fetch('', {
@@ -193,7 +202,14 @@ export class VideoTaskService {
     }
 
     const data = await response.json();
-    this.logger.log(`火山引擎响应: ${JSON.stringify(data)}`);
+    this.logger.log(
+      JSON.stringify({
+        event: 'video_task_provider_response',
+        taskId: data.id,
+        status: data.status || 'queued',
+        model: data.model || this.apiModel,
+      }),
+    );
 
     const task = this.videoTaskRepo.create({
       sessionId: params.sessionId,
