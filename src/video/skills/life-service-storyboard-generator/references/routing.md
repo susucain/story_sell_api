@@ -12,6 +12,8 @@
 
 每种类型拥有独立的模型参数、叙事逻辑和生成规则，必须类型隔离，避免风格混淆。每个镜头以促进点击和购买为目的；画面描述、运镜和旁白必须使用简体中文；重视真实体验、感官细节和快节奏。镜头时长按类型动态调整：团购 3-5 秒、探店 5-8 秒、低价 2-4 秒。必须遵守内容安全规范和合规营销要求。
 
+视频模型单次生成上限为 15 秒：完整创作脚本的总时长和最后一个镜头结束时间都不得超过 15 秒，超出时压缩镜头重新分配时间，不得生成 30/45/60 秒脚本。
+
 ## 编辑模式
 
 先判断用户修改的对象，并只选择一个模式：
@@ -37,6 +39,6 @@
 
 ## 读取规则
 
-脚本创作或修改先读取本文件、`storyboard.md` 和 `seedance.md`。涉及系统虚拟人、上传人像或服装时额外读取 `character.md`。按视频类型按需读取 `life-service-storyboard-generator/references/type-configuration-center.md` 的对应配置段落；需要 Seedance 格式时按需读取 `life-service-storyboard-generator/references/seedance_2_0_template.md`。每次调用 `generate_script` 保存 `seedance_prompt` 前，必须读取 `sd2-pe/SKILL.md` 完成 Seedance 专项审查。
+脚本创作或修改的第一步必须是调用 `start_script_creation`：每轮创作或修改都要调用，同一会话中之前调用过也要重新调用；未调用前不得读取创作指南或调用 `generate_script`。随后先读取本文件、`storyboard.md` 和 `seedance.md`。涉及系统虚拟人、上传人像或服装时额外读取 `character.md`。按视频类型按需读取 `life-service-storyboard-generator/references/type-configuration-center.md` 的对应配置段落；需要 Seedance 格式时按需读取 `life-service-storyboard-generator/references/seedance_2_0_template.md`。每次调用 `generate_script` 保存 `seedance_prompt` 前，必须读取 `sd2-pe/SKILL.md` 完成 Seedance 专项审查。
 
 直接按完整给定路径调用 `read_file`，禁止先用 `ls` 探索目录；只读取当前任务真正需要的指导和专项资料，不将其完整内容注入系统提示词。

@@ -51,21 +51,35 @@ export class StoryboardParserService {
     };
 
     for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('**总时长**') || trimmed.startsWith('> **总时长**')) {
-        const match = trimmed.match(/(\d+)\s*秒/);
+      // 兼容 "**时长**：15秒"、"- **时长**：15秒"、"> - **时长**：15秒" 等写法
+      const normalized = line.trim().replace(/^[>\-*\s]+/, '');
+      const readValue = (key: string): string | null => {
+        if (!normalized.startsWith(`**${key}**`)) return null;
+        const value = normalized
+          .slice(key.length + 4)
+          .replace(/^[:：]\s*/, '')
+          .trim();
+        return value || null;
+      };
+
+      const durationText = readValue('总时长') ?? readValue('时长');
+      if (durationText) {
+        const match = durationText.match(/(\d+(?:\.\d+)?)\s*秒/);
         if (match) meta.duration = Number(match[1]);
       }
-      if (trimmed.startsWith('**画幅**') || trimmed.startsWith('> **画幅**')) {
-        if (trimmed.includes('9:16')) meta.ratio = '9:16';
-        else if (trimmed.includes('16:9')) meta.ratio = '16:9';
-        else if (trimmed.includes('1:1')) meta.ratio = '1:1';
+
+      const ratioText = readValue('画幅') ?? readValue('比例');
+      if (ratioText) {
+        if (ratioText.includes('9:16')) meta.ratio = '9:16';
+        else if (ratioText.includes('16:9')) meta.ratio = '16:9';
+        else if (ratioText.includes('1:1')) meta.ratio = '1:1';
       }
-      if (trimmed.startsWith('**视觉风格**') || trimmed.startsWith('> **视觉风格**')) {
-        meta.style = trimmed.split('**视觉风格**')[1]?.replace('：', '').replace(':', '').trim() || '';
-      }
-      if (trimmed.startsWith('**视频类型**') || trimmed.startsWith('> **视频类型**')) {
-        const typeText = trimmed.split('**视频类型**')[1]?.replace('：', '').replace(':', '').trim() || '';
+
+      const styleText = readValue('视觉风格') ?? readValue('风格');
+      if (styleText) meta.style = styleText;
+
+      const typeText = readValue('视频类型');
+      if (typeText) {
         if (typeText.includes('抖音')) meta.platform = '抖音';
         else if (typeText.includes('小红书')) meta.platform = '小红书';
       }

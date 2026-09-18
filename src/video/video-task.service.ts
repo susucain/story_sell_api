@@ -59,6 +59,9 @@ interface CharacterMeta {
   outfit?: AvatarOutfitInput;
 }
 
+/** 视频模型单次生成的时长上限（秒） */
+export const MAX_VIDEO_DURATION_SEC = 15;
+
 const TASK_STATUSES = ['queued', 'running', 'persisting', 'succeeded', 'failed', 'expired', 'cancelled'] as const;
 const TERMINAL_TASK_STATUSES = new Set<string>(['succeeded', 'failed', 'expired', 'cancelled']);
 const TASK_STATUS_ORDER: Record<string, number> = {
@@ -168,7 +171,17 @@ export class VideoTaskService {
       }
     }
 
-    const { duration = 15, ratio = '9:16' } = params;
+    const { duration = MAX_VIDEO_DURATION_SEC, ratio = '9:16' } = params;
+
+    if (
+      !Number.isFinite(duration) ||
+      duration <= 0 ||
+      duration > MAX_VIDEO_DURATION_SEC
+    ) {
+      throw new BadRequestException(
+        `视频时长必须在 1-${MAX_VIDEO_DURATION_SEC} 秒之间，当前为 ${duration} 秒`,
+      );
+    }
 
     const requestBody: any = {
       model: this.apiModel,
@@ -282,6 +295,15 @@ export class VideoTaskService {
     }
 
     const fullVideoEdit = await this.resolveFullVideoEdit(script);
+    const scriptMeta = script.meta ?? {};
+    const scriptDuration =
+      typeof scriptMeta.duration === 'number' && scriptMeta.duration > 0
+        ? scriptMeta.duration
+        : undefined;
+    const scriptRatio =
+      typeof scriptMeta.ratio === 'string' && scriptMeta.ratio
+        ? scriptMeta.ratio
+        : undefined;
     // 查询该会话下可作为生成参考的素材（达人形象照、环境照片、参考视频等）
     const referenceAssets = await this.assetRepo.find({
       where: { sessionId: script.sessionId, assetPurpose: In(['reference', 'all']) },
@@ -314,8 +336,8 @@ export class VideoTaskService {
         ...imageUrls,
       ])],
       videoUrls: [...new Set(videoUrls)],
-      duration: fullVideoEdit?.sourceDurationSec,
-      ratio: fullVideoEdit?.ratio,
+      duration: fullVideoEdit?.sourceDurationSec ?? scriptDuration,
+      ratio: fullVideoEdit?.ratio ?? scriptRatio,
       signal: options.signal,
     });
     this.throwIfAborted(options.signal);
