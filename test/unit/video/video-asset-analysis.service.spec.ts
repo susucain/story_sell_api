@@ -294,4 +294,36 @@ describe('ProcessTracker asset failures', () => {
       tag: { text: '可重试', type: 'info' },
     });
   });
+
+  it('does not emit any process state before start triggers the panel', () => {
+    const writer = { write: jest.fn() };
+    const tracker = new ProcessTracker({
+      writer,
+      analysisAssets: [createAsset(1)],
+    });
+
+    tracker.markAssetRunning(1);
+    tracker.markAssetFailed(1, 'ASSET_PARSE_TIMEOUT');
+
+    expect(writer.write).not.toHaveBeenCalled();
+  });
+
+  it('renders asset results recorded before start when the creation flow begins', () => {
+    const writer = { write: jest.fn() };
+    const tracker = new ProcessTracker({
+      writer,
+      analysisAssets: [createAsset(1)],
+    });
+
+    tracker.markAssetFailed(1, 'ASSET_PARSE_TIMEOUT');
+    tracker.start();
+
+    const state = writer.write.mock.calls.at(-1)![0].data;
+    const phase = state.phases.find((item: any) => item.id === 'parse-materials');
+    expect(phase.status).toBe('completed');
+    expect(phase.items[0]).toMatchObject({
+      status: 'error',
+      description: '素材解析失败，可在后续请求中重试',
+    });
+  });
 });

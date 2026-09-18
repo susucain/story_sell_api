@@ -137,7 +137,7 @@ export class ProcessTracker {
         },
         {
           id: 'generate-script-action',
-          title: estimatedShots ? `生成 ${estimatedShots} 镜头分镜脚本` : '生成分镜脚本',
+          title: '生成分镜脚本',
           description: this.buildGenerateDesc(options.productProfile),
           status: 'pending',
         },
@@ -164,6 +164,7 @@ export class ProcessTracker {
   start() {
     if (this.started || this.finished) return;
     this.started = true;
+    this.hasGenerationActivity = true;
     const startTime = this.now();
     this.state.status = 'running';
     this.state.startTime = startTime;
@@ -187,7 +188,7 @@ export class ProcessTracker {
 
   /** 标记某个素材正在解析中 */
   markAssetRunning(assetId: number) {
-    if (!this.started || this.finished) return;
+    if (this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'parse-materials');
     if (!phase?.items) return;
@@ -198,7 +199,7 @@ export class ProcessTracker {
 
   /** 标记素材解析完成 */
   markAssetParsed(assetId: number, summary: string) {
-    if (!this.started || this.finished) return;
+    if (this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'parse-materials');
     if (!phase?.items) return;
@@ -217,7 +218,7 @@ export class ProcessTracker {
 
   /** 标记素材解析失败，后续请求可重试。 */
   markAssetFailed(assetId: number, _errorCode: string) {
-    if (!this.started || this.finished) return;
+    if (this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'parse-materials');
     if (!phase?.items) return;
@@ -422,6 +423,8 @@ export class ProcessTracker {
   }
 
   private emit() {
+    // 未 start() 前只更新内部状态、不推送，待 start_script_creation 开启面板时一次性渲染
+    if (!this.started) return;
     const part: ProcessStateDataPart = {
       type: 'data-process-state',
       data: JSON.parse(JSON.stringify(this.state)),

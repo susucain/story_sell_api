@@ -12,9 +12,36 @@ export interface SeedancePromptNormalizationResult {
 
 @Injectable()
 export class SeedancePromptValidatorService {
-  normalize(prompt: string): SeedancePromptNormalizationResult {
+  normalize(
+    prompt: string,
+    options: { assetIdReplacements?: Record<string, string> } = {},
+  ): SeedancePromptNormalizationResult {
     let normalized = this.normalizeLineEndings(prompt);
     const changes: string[] = [];
+
+    for (const [assetId, reference] of Object.entries(
+      options.assetIdReplacements ?? {},
+    )) {
+      if (!assetId || !reference) continue;
+      const pattern = new RegExp(
+        `\\[?${this.escapeRegExp(assetId)}\\]?`,
+        'gi',
+      );
+      const replaced = normalized.replace(pattern, reference);
+      if (replaced !== normalized) {
+        normalized = replaced;
+        changes.push(`已将素材 ${assetId} 替换为 ${reference}`);
+      }
+    }
+
+    const shotBlocks = normalized.match(/镜头\s*\d+[\s\S]*?(?=镜头\s*\d+|$)/g) ?? [];
+    if (shotBlocks.length >= 2) {
+      const withoutAbsoluteTimes = this.removeMultiShotAbsoluteTimes(normalized);
+      if (withoutAbsoluteTimes !== normalized) {
+        normalized = withoutAbsoluteTimes;
+        changes.push('已删除多镜头绝对时间码');
+      }
+    }
 
     if (!this.hasNoTextConstraint(normalized)) {
       normalized = `${normalized.trim()}\n\n保持无字幕，避免生成任何文字或字幕。`;
@@ -88,6 +115,26 @@ export class SeedancePromptValidatorService {
 
   private normalizeLineEndings(prompt: string): string {
     return prompt.replace(/\r\n/g, '\n');
+  }
+
+  private escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private removeMultiShotAbsoluteTimes(prompt: string): string {
+    const timestampRange =
+      /\d{1,2}:\d{2}(?::\d{2})?\s*[-~–—至到]\s*\d{1,2}:\d{2}(?::\d{2})?/gi;
+    const secondRange = /\d+(?:\.\d+)?\s*(?:秒|s)\s*[-~–—至到]\s*\d+(?:\.\d+)?\s*(?:秒|s)?/gi;
+    const compactSecondRange = /\d+(?:\.\d+)?\s*[-~–—至到]\s*\d+(?:\.\d+)?\s*(?:秒|s)/gi;
+    const standaloneSeconds = /\d+(?:\.\d+)?\s*(?:秒|s)\b/gi;
+
+    return prompt
+      .replace(timestampRange, '')
+      .replace(secondRange, '')
+      .replace(compactSecondRange, '')
+      .replace(standaloneSeconds, '')
+      .replace(/[：:]\s*([，,、])/g, '$1')
+      .replace(/[（(]\s*[）)]/g, '');
   }
 
   private hasNoTextConstraint(prompt: string): boolean {

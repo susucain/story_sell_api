@@ -18,6 +18,28 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.errors).toContainEqual(expect.stringContaining('asset ID'));
   });
 
+  it('replaces a known asset ID with the image reference during normalization', () => {
+    const result = validator.normalize(
+      '让 [asset-20260720212016-qfsgq] 中的人物跑向镜头。',
+      { assetIdReplacements: { 'asset-20260720212016-qfsgq': '@图片1' } },
+    );
+
+    expect(result.prompt).toContain('@图片1 中的人物');
+    expect(result.prompt).not.toContain('asset-');
+    expect(result.changes).toContainEqual(
+      expect.stringContaining('asset-20260720212016-qfsgq'),
+    );
+  });
+
+  it('still rejects asset IDs that were not replaced', () => {
+    const normalized = validator.normalize('让 [asset-123] 中的人跑向镜头。', {
+      assetIdReplacements: { 'asset-20260720212016-qfsgq': '@图片1' },
+    });
+    const result = validator.validate(normalized.prompt);
+
+    expect(result.errors).toContainEqual(expect.stringContaining('asset ID'));
+  });
+
   it('rejects ambiguous asset references followed by actions', () => {
     const result = validator.validate('@图片1跑向画面右侧。');
 
@@ -71,6 +93,16 @@ describe('SeedancePromptValidatorService', () => {
 
     expect(normalized.changes).toContain('已补齐无文字画面约束');
     expect(normalized.prompt).toContain('保持无字幕，避免生成任何文字或字幕');
+    expect(validator.validate(normalized.prompt).errors).toEqual([]);
+  });
+
+  it('normalizes absolute times out of multi-shot Seedance prompts before saving', () => {
+    const normalized = validator.normalize(
+      '镜头1：0-3秒，固定镜头，展示菜品。镜头2：0:03-0:06，跟拍主体。高清，保持无字幕，避免生成任何文字或字幕。',
+    );
+
+    expect(normalized.changes).toContain('已删除多镜头绝对时间码');
+    expect(normalized.prompt).not.toMatch(/0-3秒|0:03-0:06/);
     expect(validator.validate(normalized.prompt).errors).toEqual([]);
   });
 

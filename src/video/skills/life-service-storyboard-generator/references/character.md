@@ -19,5 +19,7 @@
 - `云游`：`asset-20260720211601-76nqw`，玄幻散修风格。
 - `凌霜`：`asset-20260804202404-mzn8z`，武林女侠客风格。
 
+以上 `asset-xxx` 只用于 `meta.character.presetAvatarId`，严禁写入 `seedance_prompt` 或 `storyboard_markdown`。主角色人像始终是视频请求的第 1 张参考图，提示词中统一写 `<主体1>@图片1`（如“<主体1>@图片1中的人物”）。
+
 若用户要求已下线的旧文本角色，必须要求其从上述 7 个系统虚拟人中选择；禁止自动映射或保存脚本。角色设定写入 `roleName` 和 `rolePrompt`。
 

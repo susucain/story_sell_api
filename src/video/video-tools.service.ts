@@ -10,7 +10,7 @@ import { VideoScript } from './entities/video-script.entity';
 import { VideoSession } from './entities/video-session.entity';
 import { VideoTask } from './entities/video-task.entity';
 import { StoryboardParserService } from './storyboard-parser.service';
-import { VideoTaskService } from './video-task.service';
+import { VideoTaskService, MAX_VIDEO_DURATION_SEC } from './video-task.service';
 import {
   getPresetAvatar,
   isLegacyAvatarAlias,
@@ -148,7 +148,7 @@ export class VideoToolsService {
   private buildStartScriptCreationTool() {
     return tool({
       description:
-        '开始一次分镜脚本创作流程。仅当用户明确要求生成、创作、重写或修改视频分镜脚本时调用，并且必须在解析创作素材、读取创作规范或生成脚本之前调用。普通问候、素材分析、商品画像更新、知识问答和视频生成任务不得调用。',
+        '开始一次分镜脚本创作流程。每轮用户明确要求生成、创作、重写或修改视频分镜脚本时都必须先调用本工具（同一会话中之前调用过也要重新调用，它不是一次性开关），并且必须在解析创作素材、读取创作规范或生成脚本之前调用；未调用前不得调用 generate_script。普通问候、素材分析、商品画像更新、知识问答和视频生成任务不得调用。',
       inputSchema: zodSchema(z.object({})),
       execute: async () => ({
         success: true,
@@ -355,39 +355,48 @@ export class VideoToolsService {
       targetEndSec: z.number().positive(),
       preserveAudio: z.boolean(),
     });
-    const editField = ctx.fullVideoEdit ? editSchema : editSchema.optional();
+    const editField = ctx.fullVideoEdit ? editSchema : editSchema.nullish();
+    // 时长/画幅允许模型漏填，漏填时静默使用解析值或默认值，不触发工具重试
+    const durationField = z.number().int().positive().nullish();
+    const ratioField = z.enum(['9:16', '16:9', '1:1']).nullish();
 
     return tool({
       description: ctx.fullVideoEdit
         ? '当前请求已锁定为引用视频的完整视频编辑任务。meta.edit 为必填项，必须使用当前原视频素材和完整时长；用户未给出修改时间范围时应先追问，禁止保存普通分镜脚本。storyboard_markdown 必须包含可解析的任务镜头，格式为“### 镜头 1：视频局部编辑 (开始s - 结束s)”，并包含“画面描述”和“旁白”字段。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。'
-        : '保存最终的分镜脚本，或保存基于已有视频的完整视频编辑任务。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。脚本重写时保存完整新脚本；完整视频编辑时 storyboard_markdown 仅包含可解析的视频编辑任务，seedance_prompt 必须要求输出原视频完整时长且仅修改目标时间段，meta.edit 必须提供原视频素材和时间范围。多镜头 seedance_prompt 只能按“镜头1 / 镜头2 / 镜头3”顺序描述，禁止复制 storyboard_markdown 中的秒数或时间码。不得只在对话中输出提示词。工具会接收 storyboard_markdown、seedance_prompt 和 meta，自动解析为结构化数据并写入数据库。',
+        : '保存最终的分镜脚本，或保存基于已有视频的完整视频编辑任务。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。脚本重写时保存完整新脚本；完整视频编辑时 storyboard_markdown 仅包含可解析的视频编辑任务，seedance_prompt 必须要求输出原视频完整时长且仅修改目标时间段，meta.edit 必须提供原视频素材和时间范围。多镜头 seedance_prompt 只能按“镜头1 / 镜头2 / 镜头3”顺序描述，禁止复制 storyboard_markdown 中的秒数或时间码。不得只在对话中输出提示词。工具会接收 storyboard_markdown、seedance_prompt 和 meta，自动解析为结构化数据并写入数据库。seedance_prompt 中禁止出现 asset ID、素材编号或“参考图1”，人像统一写 <主体1>@图片1；meta.character 必须包含 mode 和 selectionSource。',
       inputSchema: zodSchema(
         z.object({
           title: z.string(),
           storyboard_markdown: z.string(),
           seedance_prompt: z.string(),
           meta: z.object({
-            description: z.string(),
-            hashtags: z.array(z.string()),
+            duration: durationField.describe(
+              `视频总时长（秒，上限 ${MAX_VIDEO_DURATION_SEC} 秒），建议与 storyboard_markdown 的总时长一致；留空时按脚本解析结果或默认 ${MAX_VIDEO_DURATION_SEC} 秒处理`,
+            ),
+            ratio: ratioField.describe(
+              '画幅比例，抖音/小红书竖屏使用 9:16；留空时按脚本解析结果或默认 9:16 处理',
+            ),
+            style: z.string().nullish().describe('视觉风格关键词'),
+            platform: z.string().nullish().describe('投放平台，如 抖音 / 小红书'),
+            description: z.string().optional(),
+            hashtags: z.array(z.string()).optional(),
             character: z.object({
               mode: z.enum(['user_portrait', 'preset_avatar', 'none']),
-              roleName: z.string().optional(),
-              rolePrompt: z.string().optional(),
-              primaryAssetId: z.number().int().positive().optional(),
-              presetAvatarId: z.string().optional(),
-              presetAlias: z.string().optional(),
+              roleName: z.string().nullish(),
+              rolePrompt: z.string().nullish(),
+              primaryAssetId: z.number().int().positive().nullish(),
+              presetAvatarId: z.string().nullish(),
+              presetAlias: z.string().nullish(),
               outfit: z
                 .object({
                   mode: z.enum(['preset', 'custom']),
-                  presetOutfitId: z.string().optional(),
-                  customPrompt: z.string().optional(),
+                  presetOutfitId: z.string().nullish(),
+                  customPrompt: z.string().nullish(),
                 })
-                .optional(),
-              selectionSource: z.enum([
-                'user_explicit',
-                'auto_selected',
-                'inherited',
-              ]),
+                .nullish(),
+              selectionSource: z
+                .enum(['user_explicit', 'auto_selected', 'inherited'])
+                .default('auto_selected'),
             }),
             edit: editField,
           }),
@@ -426,8 +435,18 @@ export class VideoToolsService {
           }
         }
 
-        const normalization =
-          this.seedancePromptValidator.normalize(seedance_prompt);
+        // 主角色人像会作为第 1 张参考图传给模型，模型误写素材 ID 时自动替换为 @图片1
+        const presetAvatarId = meta.character.presetAvatarId;
+        const assetIdReplacements =
+          meta.character.mode === 'preset_avatar' &&
+          presetAvatarId &&
+          isPresetAvatarId(presetAvatarId)
+            ? { [presetAvatarId]: '@图片1' }
+            : undefined;
+        const normalization = this.seedancePromptValidator.normalize(
+          seedance_prompt,
+          { assetIdReplacements },
+        );
         const validation = this.seedancePromptValidator.validate(
           normalization.prompt,
         );
@@ -551,7 +570,50 @@ export class VideoToolsService {
               '脚本未包含可解析的镜头。请使用“### 镜头 1：名称 (0s - 3s)”及画面描述、旁白字段重新生成。',
           };
         }
+
+        const declaredDurationRaw = meta.edit
+          ? meta.edit.sourceDurationSec
+          : (meta.duration ?? parsed.meta.duration);
+        const declaredDuration =
+          typeof declaredDurationRaw === 'number' &&
+          Number.isFinite(declaredDurationRaw)
+            ? declaredDurationRaw
+            : 0;
+        const lastShotEndSec = Math.max(
+          0,
+          ...parsed.shots.map((shot) => {
+            const match =
+              typeof shot.time === 'string'
+                ? shot.time.match(/-(\d+(?:\.\d+)?)s$/)
+                : null;
+            return match ? Number(match[1]) : 0;
+          }),
+        );
+        const effectiveDuration = Math.max(declaredDuration, lastShotEndSec);
+        if (effectiveDuration > MAX_VIDEO_DURATION_SEC) {
+          return {
+            success: false,
+            message: meta.edit
+              ? `原视频时长 ${effectiveDuration} 秒超过模型单次生成上限 ${MAX_VIDEO_DURATION_SEC} 秒，无法生成完整视频编辑任务。`
+              : `脚本总时长 ${effectiveDuration} 秒超过模型单次生成上限 ${MAX_VIDEO_DURATION_SEC} 秒，请压缩镜头，使最后一个镜头结束时间不超过 ${MAX_VIDEO_DURATION_SEC} 秒后重新保存。`,
+          };
+        }
+
         const nextVersion = await this.getNextVersion(ctx.sessionId);
+
+        // 显式传入的 meta 优先于从 markdown 解析的默认值；未提供的字段不覆盖解析结果
+        const mergedMeta: Record<string, unknown> = {
+          ...parsed.meta,
+          ...Object.fromEntries(
+            Object.entries(meta).filter(
+              ([, value]) => value !== undefined && value !== null,
+            ),
+          ),
+        };
+        // 完整视频编辑模式的时长/画幅以原视频为准
+        if (meta.edit) {
+          mergedMeta.duration = meta.edit.sourceDurationSec;
+        }
 
         this.throwIfAborted(executionContext.abortSignal);
         const script = this.scriptRepo.create({
@@ -563,10 +625,7 @@ export class VideoToolsService {
           shots: parsed.shots,
           scriptMarkdown: storyboard_markdown,
           seedancePrompt: normalization.prompt,
-          meta: {
-            ...parsed.meta,
-            ...meta,
-          },
+          meta: mergedMeta,
           sourceMessageId: ctx.currentMessageId,
           basedOnVersion: ctx.referencedVersion,
           status: 'draft',
