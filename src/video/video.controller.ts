@@ -242,6 +242,30 @@ export class VideoController {
     });
   }
 
+  // 必须声明在 generate/:taskId 之前，否则会被动态参数路由抢先匹配
+  @Get('generate/remote/list')
+  async listRemoteVideoTasks(
+    @Query('page_num') pageNum?: string,
+    @Query('page_size') pageSize?: string,
+    @Query('status') status?: string,
+    @Query('task_ids') taskIds?: string | string[],
+    @Query('model') model?: string,
+  ) {
+    const normalizedTaskIds = Array.isArray(taskIds)
+      ? taskIds
+      : taskIds
+        ? [taskIds]
+        : undefined;
+
+    return this.videoTaskService.listRemoteTasks({
+      pageNum: pageNum ? Number(pageNum) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+      status,
+      taskIds: normalizedTaskIds,
+      model,
+    });
+  }
+
   @Get('generate/:taskId')
   async getVideoTask(
     @Param('taskId') taskId: string,
