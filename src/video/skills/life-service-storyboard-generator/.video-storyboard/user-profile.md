@@ -97,9 +97,9 @@
 - BGM风格：Upbeat, Rhythmic, Matching video mood (欢快、有节奏、匹配视频氛围)
 - 旁白：First-person narration or conversational style (第一人称叙述或对话风格)
 - 口播：Enabled (启用口播)
-- 字幕：Enabled (启用字幕)
-- 旁白/台词呈现方式：旁白+台词，每个镜头都有对应的口播和字幕内容
-- **制作红线**：语音/字幕必须与脚本100%一致，禁止自由发挥。
+- 字幕：后期添加（Seedance 提示词严禁生成字幕或任何画面文字）
+- 旁白/台词呈现方式：旁白+台词，每个镜头都有对应的口播内容（台词使用 `{}` 语法，不生成画面字幕）
+- **制作红线**：语音必须与脚本100%一致，禁止自由发挥；视频内不新增任何文字（字幕、标题、价签等由后期添加），参考素材里已有的画面文字可随素材复刻，提示词不得指定或新增文字内容。
 
 ### 输出偏好
 - 输出模式：Markdown File Only (Must output as .md file, do not output directly in chat) (仅Markdown文件，必须输出为.md文件，不直接在聊天中输出)
