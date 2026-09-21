@@ -91,6 +91,10 @@ wait_for_backend() {
   return 1
 }
 
+migrations_enabled() {
+  grep -Eq '^[[:space:]]*RUN_MIGRATIONS=true[[:space:]]*$' "${APP_ENV}"
+}
+
 rollback() {
   if [[ -z "${previous_image}" || "${previous_image}" == "${NEW_IMAGE}" ]]; then
     echo "No previous image is available for rollback." >&2
@@ -114,6 +118,11 @@ compose up -d --no-deps --force-recreate nest-app
 if ! wait_for_backend; then
   echo "Deployment health check failed." >&2
   compose logs --tail=100 nest-app >&2 || true
+  if migrations_enabled; then
+    echo "Automatic rollback is disabled while migrations are enabled." >&2
+    echo "Restore the database backup before returning to an older image." >&2
+    exit 1
+  fi
   rollback
   exit 1
 fi
