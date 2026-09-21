@@ -90,9 +90,7 @@ export function getRefreshCookieOptions(
     maxAge: durationToMilliseconds(refreshTtl),
     path: '/auth',
     sameSite: 'lax',
-    secure:
-      configService.get<string>('AUTH_COOKIE_SECURE') === 'true' ||
-      configService.get<string>('NODE_ENV') === 'production',
+    secure: configService.get<string>('AUTH_COOKIE_SECURE') === 'true',
   };
 }
 
