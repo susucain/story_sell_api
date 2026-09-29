@@ -46,3 +46,10 @@ export function getVerticalProfile(id: string): VerticalProfile {
   }
   return VERTICAL_PROFILES[id];
 }
+
+/** 把任意来源的垂类取值收敛为已知垂类 id，未知时回退到默认垂类。 */
+export function resolveVerticalId(value: unknown): string {
+  return typeof value === 'string' && Object.hasOwn(VERTICAL_PROFILES, value)
+    ? value
+    : DEFAULT_VERTICAL_ID;
+}

@@ -37,6 +37,8 @@ export interface OrchestratorToolContext {
   currentMessageId?: number;
   parentSignal?: AbortSignal;
   mutationState?: VideoAgentMutationState;
+  /** 当前会话垂类，透传给子 Agent 的工具与解析策略 */
+  vertical?: string;
 }
 
 export interface OrchestratorRunRequest {
@@ -181,6 +183,7 @@ export class AgentOrchestratorService {
               currentMessageId: context.currentMessageId,
               parentSignal: signal,
               mutationState: context.mutationState,
+              vertical: context.vertical ?? brief.vertical,
             },
             role,
           ),

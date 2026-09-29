@@ -41,8 +41,8 @@ import {
 } from './agent-role.registry';
 import { AgentOrchestratorService } from './agent-orchestrator.service';
 import {
-  DEFAULT_VERTICAL_ID,
   getVerticalProfile,
+  resolveVerticalId,
   VerticalProfile,
 } from './vertical-profile.registry';
 
@@ -295,14 +295,15 @@ export class VideoService {
             where: { sessionId },
             order: { createdAt: 'ASC' },
           });
+          const verticalId = resolveVerticalId(session.creativeBrief?.vertical);
           const system = await this.buildSystemPrompt(
             session,
             referencedScript,
             sourceVideoAsset,
             refreshedAssets,
-            // 编排层（Task 5）落地前，单 Agent 先以总导演角色 + 生活服务垂类运行
+            // 编排层（Task 5）落地前，单 Agent 先以总导演角色运行
             this.roleRegistry.getRoleProfile('director' satisfies RoleId),
-            getVerticalProfile(DEFAULT_VERTICAL_ID),
+            getVerticalProfile(verticalId),
           );
           const baseTools = this.toolsService.buildTools({
             requestId: options.requestId,
@@ -313,6 +314,7 @@ export class VideoService {
             mutationState: requestMutationState,
             abortRequest,
             referencedVersion: referencedScript?.version,
+            vertical: verticalId,
             fullVideoEdit: sourceVideoAsset
               ? {
                   sourceAssetId: sourceVideoAsset.id,
@@ -331,6 +333,7 @@ export class VideoService {
               currentMessageId,
               parentSignal: totalSignal,
               mutationState: requestMutationState,
+              vertical: verticalId,
             }),
           };
 

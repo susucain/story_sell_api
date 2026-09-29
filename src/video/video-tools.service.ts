@@ -31,6 +31,8 @@ interface ToolContext {
   userId: number;
   currentMessageId?: number;
   referencedVersion?: number;
+  /** 当前会话垂类，决定分镜解析策略；缺省按 life-service 处理 */
+  vertical?: string;
   waitingForUser?: boolean;
   scriptUnchanged?: boolean;
   parentSignal?: AbortSignal;
@@ -559,7 +561,9 @@ export class VideoToolsService {
           }
         }
 
-        const parsed = this.storyboardParser.parse(storyboard_markdown);
+        const parsed = this.storyboardParser.parse(storyboard_markdown, {
+          vertical: ctx.vertical,
+        });
         if (meta.edit && parsed.shots.length === 0) {
           const time = `${meta.edit.targetStartSec}-${meta.edit.targetEndSec}s`;
           const scene = '视频局部编辑';
