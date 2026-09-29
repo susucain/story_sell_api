@@ -536,7 +536,7 @@ describe('video agent stream errors', () => {
       sessionId: 'session-1',
       userId: 7,
       status: 'active',
-      productProfile: {},
+      creativeBrief: {},
       topic: 'existing topic',
     };
     const sessionRepo = {
@@ -622,7 +622,7 @@ describe('video agent stream errors', () => {
           sessionId: 'session-1',
           userId: 7,
           status: 'active',
-          productProfile: {},
+          creativeBrief: {},
           topic: 'existing topic',
         }),
       },
@@ -669,7 +669,7 @@ describe('video agent stream errors', () => {
       sessionId: 'session-1',
       userId: 7,
       status: 'active',
-      productProfile: {},
+      creativeBrief: {},
       topic: 'existing topic',
     };
     const sessionRepo = {
@@ -736,7 +736,7 @@ describe('video agent stream errors', () => {
       sessionId: 'session-1',
       userId: 7,
       status: 'active',
-      productProfile: {},
+      creativeBrief: {},
       topic: 'existing topic',
     };
     const sessionRepo = {

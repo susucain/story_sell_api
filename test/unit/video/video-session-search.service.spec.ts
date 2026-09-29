@@ -124,7 +124,7 @@ describe('VideoService session search', () => {
       { keyword: '烤鸭' },
     );
     expect(search.orWhere).toHaveBeenCalledWith(
-      "INSTR(LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(video_session.product_profile, '$.product_name')), '')), LOWER(:keyword)) > 0",
+      "INSTR(LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(video_session.product_profile, '$.subject')), JSON_UNQUOTE(JSON_EXTRACT(video_session.product_profile, '$.product_name')), '')), LOWER(:keyword)) > 0",
       { keyword: '烤鸭' },
     );
   });

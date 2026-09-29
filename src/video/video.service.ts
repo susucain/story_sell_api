@@ -90,7 +90,7 @@ export class VideoService {
       session = this.sessionRepo.create({
         sessionId,
         userId,
-        productProfile: {},
+        creativeBrief: {},
         status: 'active',
       });
       await this.sessionRepo.save(session);
@@ -265,7 +265,7 @@ export class VideoService {
           const tracker = new ProcessTracker({
             writer,
             analysisAssets,
-            productProfile: session.productProfile,
+            creativeBrief: session.creativeBrief,
             isModification: !!referencedScript,
           });
           // 不在此处 start()：创作过程面板仅在 Agent 调用 start_script_creation 时开启
@@ -544,7 +544,7 @@ export class VideoService {
       }
       if (!ProcessTracker.isGenerationTool(toolName)) return;
 
-      if (toolName === 'update_product_profile') {
+      if (toolName === 'update_creative_brief') {
         tracker.markProfileRunning();
       } else if (toolName === 'generate_script') {
         // 兜底：模型漏调 start_script_creation 时，仍按真实创作行为开启面板
@@ -561,7 +561,7 @@ export class VideoService {
       const toolName = toolCallMap.get(toolCallId);
       if (!toolName) return;
 
-      if (toolName === 'update_product_profile') {
+      if (toolName === 'update_creative_brief') {
         tracker.markProfileUpdated(output?.profile);
       } else if (
         toolName === 'complete_without_script_change' &&
@@ -832,10 +832,10 @@ export class VideoService {
     }
 
     if (
-      session.productProfile &&
-      Object.keys(session.productProfile).length > 0
+      session.creativeBrief &&
+      Object.keys(session.creativeBrief).length > 0
     ) {
-      prompt += `\n## 商品画像\n${JSON.stringify(session.productProfile, null, 2)}\n`;
+      prompt += `\n## 创作简报\n${JSON.stringify(session.creativeBrief, null, 2)}\n`;
     }
 
     if (assets.length > 0) {
@@ -969,8 +969,8 @@ export class VideoService {
     });
   }
 
-  async updateProductProfile(sessionId: string, profile: Record<string, any>) {
-    await this.sessionRepo.update({ sessionId }, { productProfile: profile });
+  async updateCreativeBrief(sessionId: string, brief: Record<string, any>) {
+    await this.sessionRepo.update({ sessionId }, { creativeBrief: brief });
   }
 
   async updateSessionStatus(sessionId: string, status: string) {
@@ -1101,7 +1101,7 @@ export class VideoService {
               { keyword },
             )
             .orWhere(
-              "INSTR(LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(video_session.product_profile, '$.product_name')), '')), LOWER(:keyword)) > 0",
+              "INSTR(LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(video_session.product_profile, '$.subject')), JSON_UNQUOTE(JSON_EXTRACT(video_session.product_profile, '$.product_name')), '')), LOWER(:keyword)) > 0",
               { keyword },
             );
         }),

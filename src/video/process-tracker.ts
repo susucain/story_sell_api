@@ -63,14 +63,14 @@ const GUIDELINE_CARDS: ProcessCard[] = [
 const GENERATION_TOOLS = new Set([
   'read_file',
   'write_file',
-  'update_product_profile',
+  'update_creative_brief',
   'generate_script',
 ]);
 
 export class ProcessTracker {
   private state: ProcessState;
   private writer: { write: (chunk: any) => void };
-  private productProfile?: Record<string, any> | null;
+  private creativeBrief?: Record<string, any> | null;
   private started = false;
   private finished = false;
   private hasGenerationActivity = false;
@@ -79,11 +79,11 @@ export class ProcessTracker {
   constructor(options: {
     writer: { write: (chunk: any) => void };
     analysisAssets: VideoAsset[];
-    productProfile?: Record<string, any> | null;
+    creativeBrief?: Record<string, any> | null;
     isModification?: boolean;
   }) {
     this.writer = options.writer;
-    this.productProfile = options.productProfile;
+    this.creativeBrief = options.creativeBrief;
     const phases: ProcessPhase[] = [];
     const analysisAssets = options.analysisAssets ?? [];
 
@@ -119,7 +119,7 @@ export class ProcessTracker {
       cards: GUIDELINE_CARDS,
     });
 
-    const duration = options.productProfile?.duration as number | undefined;
+    const duration = options.creativeBrief?.duration as number | undefined;
     const estimatedShots = duration ? Math.max(1, Math.ceil(duration / 5)) : undefined;
 
     phases.push({
@@ -138,7 +138,7 @@ export class ProcessTracker {
         {
           id: 'generate-script-action',
           title: '生成分镜脚本',
-          description: this.buildGenerateDesc(options.productProfile),
+          description: this.buildGenerateDesc(options.creativeBrief),
           status: 'pending',
         },
       ],
@@ -251,21 +251,23 @@ export class ProcessTracker {
     if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     if (profile) {
-      this.productProfile = { ...(this.productProfile || {}), ...profile };
+      this.creativeBrief = { ...(this.creativeBrief || {}), ...profile };
     }
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
     if (!phase?.actions) return;
     const action = phase.actions.find((a) => a.id === 'update-product-profile');
     if (action) {
       action.status = 'completed';
-      const sellingPoints = this.productProfile?.selling_points as string[] | undefined;
-      if (sellingPoints && sellingPoints.length > 0) {
-        action.description = `提炼 ${sellingPoints.length} 个核心卖点：${sellingPoints.slice(0, 3).join('、')}`;
+      // 兼容老数据：新字段为 key_points，历史会话为 selling_points
+      const keyPoints = (this.creativeBrief?.key_points ??
+        this.creativeBrief?.selling_points) as string[] | undefined;
+      if (keyPoints && keyPoints.length > 0) {
+        action.description = `提炼 ${keyPoints.length} 个核心要点：${keyPoints.slice(0, 3).join('、')}`;
       }
-      // 根据更新后的画像刷新生成动作的描述
+      // 根据更新后的简报刷新生成动作的描述
       const genAction = phase.actions.find((a) => a.id === 'generate-script-action');
       if (genAction) {
-        genAction.description = this.buildGenerateDesc(this.productProfile);
+        genAction.description = this.buildGenerateDesc(this.creativeBrief);
       }
     }
     this.emit();
@@ -313,7 +315,7 @@ export class ProcessTracker {
       }
     }
 
-    const platform = this.productProfile?.platform as string | undefined;
+    const platform = this.creativeBrief?.platform as string | undefined;
     const tags: string[] = [
       result.title,
       `${result.shot_count} 个镜头`,

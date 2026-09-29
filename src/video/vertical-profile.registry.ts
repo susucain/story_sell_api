@@ -33,7 +33,7 @@ export const VERTICAL_PROFILES: Record<string, VerticalProfile> = {
       '{durationHint}',
       '修改已有脚本先调用 get_script；若内容已满足要求，调用 complete_without_script_change，不创建新版本。缺少必要时间范围、素材、角色选择或存在冲突时，调用 request_user_confirmation 后停止创作。',
       '查询已保存脚本或提示词先用 get_script，需要选择版本先用 list_scripts；查询视频任务先用 get_video_task_status；查询会话状态或上下文先用 get_session_state，不得猜测持久化数据。',
-      '用户给出商品名称、卖点、受众、时长、平台或风格时，及时调用 update_product_profile。除非用户明确要求查看已保存内容，不在对话中输出完整分镜或 Seedance 提示词。',
+      '用户给出商品名称、卖点、受众、时长、平台或风格时，及时调用 update_creative_brief（life-service 字段映射：subject=商品名称、key_points=卖点、audience=受众）。除非用户明确要求查看已保存内容，不在对话中输出完整分镜或 Seedance 提示词。',
     ].join('\n'),
     durationHint:
       'generate_script 的 meta 建议填写 duration（视频总时长，秒，上限 {maxDurationSec} 秒）和 ratio（9:16、16:9 或 1:1），并与 storyboard_markdown 的总时长保持一致。',

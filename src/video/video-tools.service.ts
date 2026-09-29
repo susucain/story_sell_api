@@ -74,7 +74,7 @@ export class VideoToolsService {
       start_script_creation: this.buildStartScriptCreationTool(),
       read_file: this.buildReadFileTool(),
       write_file: this.buildWriteFileTool(),
-      update_product_profile: this.buildUpdateProductProfileTool(ctx),
+      update_creative_brief: this.buildUpdateCreativeBriefTool(ctx),
       generate_script: this.buildGenerateScriptTool(ctx),
       complete_without_script_change:
         this.buildCompleteWithoutScriptChangeTool(ctx),
@@ -314,21 +314,26 @@ export class VideoToolsService {
     });
   }
 
-  private buildUpdateProductProfileTool(ctx: ToolContext) {
+  private buildUpdateCreativeBriefTool(ctx: ToolContext) {
     return tool({
       description:
-        '当从对话中了解到商品信息（名称、卖点、目标人群、时长、平台、风格基调）后，更新会话的商品画像，供后续轮次作为结构化上下文使用',
+        '当从对话中了解到创作信息（垂类、主题或商品名称、核心要点、目标人群、时长、平台、风格基调、额外约束）后，更新会话的创作简报，供后续轮次作为结构化上下文使用',
       inputSchema: zodSchema(
         z.object({
-          product_name: z.string().optional().describe('商品名称'),
-          selling_points: z
+          vertical: z
+            .string()
+            .optional()
+            .describe('创作垂类，例如 life-service'),
+          subject: z.string().optional().describe('主题或商品名称'),
+          key_points: z
             .array(z.string())
             .optional()
-            .describe('核心卖点列表'),
-          target_audience: z.string().optional().describe('目标人群'),
+            .describe('核心要点／卖点列表'),
+          audience: z.string().optional().describe('目标人群'),
           duration: z.number().optional().describe('目标视频时长（秒）'),
           platform: z.string().optional().describe('投放平台'),
           tone: z.string().optional().describe('风格基调'),
+          constraints: z.array(z.string()).optional().describe('额外约束'),
         }),
       ),
       execute: async (
@@ -341,13 +346,13 @@ export class VideoToolsService {
         const incoming = Object.fromEntries(
           Object.entries(profile).filter(([, v]) => v !== undefined),
         );
-        const merged = { ...(session?.productProfile || {}), ...incoming };
+        const merged = { ...(session?.creativeBrief || {}), ...incoming };
         await this.runAbortAware(
           executionContext,
           () =>
             this.sessionRepo.update(
               { sessionId: ctx.sessionId },
-              { productProfile: merged },
+              { creativeBrief: merged },
             ),
         );
         return { success: true, profile: merged };
@@ -971,7 +976,7 @@ export class VideoToolsService {
             session_id: session.sessionId,
             status: session.status,
             topic: session.topic,
-            product_profile: session.productProfile,
+            product_profile: session.creativeBrief,
             latest_script: latestScript
               ? {
                   script_id: latestScript.id,

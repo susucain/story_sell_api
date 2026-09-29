@@ -50,7 +50,7 @@ describe('VideoService system prompt', () => {
     sessionId: 'session-1',
     userId: 1,
     status: 'active',
-    productProfile: {},
+    creativeBrief: {},
   } as VideoSession;
 
   const build = (roleId: RoleId, verticalId = 'life-service') => {

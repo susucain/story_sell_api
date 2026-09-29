@@ -44,7 +44,7 @@ export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
     allowedTools: [
       'read_file',
       'write_file',
-      'update_product_profile',
+      'update_creative_brief',
       'request_user_confirmation',
       'create_video_task',
       ...READ_ONLY_TOOLS,
@@ -61,7 +61,7 @@ export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
       'start_script_creation',
       'read_file',
       'write_file',
-      'update_product_profile',
+      'update_creative_brief',
       'generate_script',
       'complete_without_script_change',
       'request_user_confirmation',

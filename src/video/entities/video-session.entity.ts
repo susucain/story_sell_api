@@ -22,8 +22,14 @@ export class VideoSession {
   @Column({ name: 'topic', length: 128, nullable: true, comment: '会话主题' })
   topic: string;
 
-  @Column({ name: 'product_profile', type: 'json', nullable: true, comment: '结构化商品画像' })
-  productProfile: Record<string, any>;
+  // 列名沿用 product_profile，老数据可直接读取，无需数据迁移
+  @Column({
+    name: 'product_profile',
+    type: 'json',
+    nullable: true,
+    comment: '结构化创作简报（垂类无关）',
+  })
+  creativeBrief: Record<string, any>;
 
   @Column({ name: 'status', length: 32, default: 'active', comment: '会话状态' })
   status: string;
