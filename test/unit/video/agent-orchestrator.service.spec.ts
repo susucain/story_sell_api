@@ -20,13 +20,16 @@ import { VideoToolsService } from '../../../src/video/video-tools.service';
 const toolLoopAgentMock = ToolLoopAgent as unknown as jest.Mock;
 
 describe('AgentOrchestratorService', () => {
-  const buildOrchestrator = () => {
-    const configService = { get: () => undefined } as unknown as ConfigService;
+  const buildOrchestrator = (env: Record<string, string> = {}) => {
+    const configService = {
+      get: (key: string) => env[key],
+    } as unknown as ConfigService;
     return new AgentOrchestratorService(
       new AgentRoleRegistryService(),
       { getLanguageModel: () => ({}) } as unknown as VideoLLMService,
       { buildTools: () => ({}) } as unknown as VideoToolsService,
       new VideoAgentExecutionService(configService),
+      configService,
     );
   };
 
@@ -77,5 +80,39 @@ describe('AgentOrchestratorService', () => {
       'dispatch_role_agent',
       'submit_creative_brief',
     ]);
+  });
+
+  it('enables orchestration by default and honours the opt-out switch', () => {
+    expect(buildOrchestrator().isEnabled()).toBe(true);
+    expect(
+      buildOrchestrator({ VIDEO_AGENT_ORCHESTRATION: 'on' }).isEnabled(),
+    ).toBe(true);
+    expect(
+      buildOrchestrator({ VIDEO_AGENT_ORCHESTRATION: 'off' }).isEnabled(),
+    ).toBe(false);
+    expect(
+      buildOrchestrator({ VIDEO_AGENT_ORCHESTRATION: '0' }).isEnabled(),
+    ).toBe(false);
+    expect(
+      buildOrchestrator({ VIDEO_AGENT_ORCHESTRATION: 'FALSE' }).isEnabled(),
+    ).toBe(false);
+  });
+
+  it('reports every dispatched role back to the caller', async () => {
+    toolLoopAgentMock.mockImplementation(() => ({
+      generate: jest.fn().mockResolvedValue({ text: '角色产出' }),
+    }));
+    const dispatched: string[] = [];
+    const tools = buildOrchestrator().buildDispatchTools({
+      sessionId: 'session-1',
+      userId: 1,
+      onRoleDispatched: (role) => dispatched.push(role),
+    });
+
+    await (
+      tools as unknown as Record<string, { execute: Function }>
+    ).dispatch_role_agent.execute({ role: 'screenwriter', task: '写脚本' });
+
+    expect(dispatched).toEqual(['screenwriter']);
   });
 });

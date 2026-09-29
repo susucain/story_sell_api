@@ -34,17 +34,23 @@ const READ_ONLY_TOOLS = [
   'get_session_state',
 ];
 
+/** 只读顾问角色（编剧/分镜/摄影/质检）的工具：读技能文件 + 只读查询，不落库、不触发视频生成 */
+const ADVISOR_TOOLS = ['read_file', ...READ_ONLY_TOOLS];
+
 export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
   director: {
     id: 'director',
     displayName: '总导演',
     identity:
-      '你是视频创作的负责人（总导演），负责理解用户意图、统筹脚本创作与视频生成；必要时把专业任务分派给编剧、导演、摄影等角色。',
+      '你是视频创作的负责人（总导演），负责理解用户意图、沉淀创作简报、按流水线把专业任务分派给编剧、分镜导演与摄影角色，汇总其产出后亲自保存脚本，并决定是否需要生成视频。',
     allowedSkills: ['life-service-storyboard-generator'],
     allowedTools: [
+      'start_script_creation',
       'read_file',
       'write_file',
       'update_creative_brief',
+      'generate_script',
+      'complete_without_script_change',
       'request_user_confirmation',
       'create_video_task',
       ...READ_ONLY_TOOLS,
@@ -55,41 +61,28 @@ export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
   screenwriter: {
     id: 'screenwriter',
     displayName: '编剧',
-    identity: '你是编剧，负责根据创作简报产出剧本、台词与分镜脚本。',
+    identity:
+      '你是编剧，负责根据创作简报产出剧本、台词与分镜脚本。你只返回内容，不落库、不触发视频生成。',
     allowedSkills: ['life-service-storyboard-generator'],
-    allowedTools: [
-      'start_script_creation',
-      'read_file',
-      'write_file',
-      'update_creative_brief',
-      'generate_script',
-      'complete_without_script_change',
-      'request_user_confirmation',
-      ...READ_ONLY_TOOLS,
-    ],
-    outputSchemaHint: '返回 title 与 storyboard_markdown。',
+    allowedTools: ADVISOR_TOOLS,
+    outputSchemaHint: '返回 title、storyboard_markdown 与 hook。',
   },
   'shot-planner': {
     id: 'shot-planner',
-    displayName: '导演',
-    identity: '你是导演，负责把剧本拆解为可拍摄的分镜、节奏与时长安排。',
+    displayName: '分镜导演',
+    identity:
+      '你是分镜导演，负责把剧本拆解为可拍摄的分镜、节奏与时长安排。你只返回内容，不落库、不触发视频生成。',
     allowedSkills: ['life-service-storyboard-generator'],
-    allowedTools: [
-      'read_file',
-      'write_file',
-      'generate_script',
-      'complete_without_script_change',
-      'request_user_confirmation',
-      ...READ_ONLY_TOOLS,
-    ],
-    outputSchemaHint: '返回镜头列表与每个镜头的时长。',
+    allowedTools: ADVISOR_TOOLS,
+    outputSchemaHint: '返回完整 storyboard_markdown 与每个镜头的时长。',
   },
   cinematographer: {
     id: 'cinematographer',
     displayName: '摄影',
-    identity: '你是摄影指导，负责画面、运镜与 Seedance 提示词的视觉表达。',
+    identity:
+      '你是摄影指导，负责画面、运镜与 Seedance 提示词的视觉表达。你只返回内容，不落库、不触发视频生成。',
     allowedSkills: ['life-service-storyboard-generator', 'sd2-pe'],
-    allowedTools: ['read_file', 'write_file', ...READ_ONLY_TOOLS],
+    allowedTools: ADVISOR_TOOLS,
     outputSchemaHint: '返回每个镜头的 seedance_prompt。',
   },
   reviewer: {
@@ -97,7 +90,7 @@ export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
     displayName: '质检',
     identity: '你是质检角色，负责校验字幕、安全与脚本一致性等红线。',
     allowedSkills: ['life-service-storyboard-generator', 'sd2-pe'],
-    allowedTools: ['read_file', ...READ_ONLY_TOOLS],
+    allowedTools: ADVISOR_TOOLS,
     outputSchemaHint: '返回问题列表与严重级别。',
   },
 };

@@ -40,8 +40,27 @@ describe('VideoToolsService role scoping', () => {
   it('only exposes tools allowed by the active role profile', () => {
     const tools = createService().buildTools(ctx, ROLE_PROFILES.screenwriter);
 
-    expect(tools).toHaveProperty('generate_script');
+    expect(tools).toHaveProperty('read_file');
+    expect(tools).not.toHaveProperty('generate_script');
     expect(tools).not.toHaveProperty('create_video_task');
+  });
+
+  it('blocks generate_script until a role has been dispatched in orchestrated mode', async () => {
+    const tools = createService().buildTools({
+      ...ctx,
+      requireDispatch: true,
+      dispatchedRoles: [],
+    });
+
+    const result = await (
+      tools as Record<string, { execute: Function }>
+    ).generate_script.execute(
+      { title: 't', storyboard_markdown: '', seedance_prompt: '', meta: {} },
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('dispatch_role_agent');
   });
 
   it('exposes exactly the whitelisted tools for a role', () => {

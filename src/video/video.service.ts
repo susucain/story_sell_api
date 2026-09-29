@@ -297,15 +297,20 @@ export class VideoService {
             order: { createdAt: 'ASC' },
           });
           const verticalId = resolveVerticalId(session.creativeBrief?.vertical);
+          // 引用视频修改走专用编辑模式，不进入多 Agent 分派流水线
+          const orchestrated =
+            this.orchestrator.isEnabled() && !sourceVideoAsset;
           const system = await this.buildSystemPrompt(
             session,
             referencedScript,
             sourceVideoAsset,
             refreshedAssets,
-            // 编排层（Task 5）落地前，单 Agent 先以总导演角色运行
             this.roleRegistry.getRoleProfile('director' satisfies RoleId),
             getVerticalProfile(verticalId),
+            orchestrated,
           );
+          // 已分派角色列表在导演与编排工具之间共享，用于 generate_script 的前置校验
+          const dispatchedRoles: string[] = [];
           const baseTools = this.toolsService.buildTools({
             requestId: options.requestId,
             sessionId,
@@ -316,6 +321,8 @@ export class VideoService {
             abortRequest,
             referencedVersion: referencedScript?.version,
             vertical: verticalId,
+            requireDispatch: orchestrated,
+            dispatchedRoles,
             fullVideoEdit: sourceVideoAsset
               ? {
                   sourceAssetId: sourceVideoAsset.id,
@@ -324,19 +331,26 @@ export class VideoService {
                 }
               : undefined,
           });
-          // 编排工具为增量能力：导演不主动调用时，流程与工具集行为保持不变
-          const tools = {
-            ...baseTools,
-            ...this.orchestrator.buildDispatchTools({
-              requestId: options.requestId,
-              sessionId,
-              userId,
-              currentMessageId,
-              parentSignal: totalSignal,
-              mutationState: requestMutationState,
-              vertical: verticalId,
-            }),
-          };
+          // 关闭编排时保持单 Agent 行为：不挂载编排工具、不做分派前置校验
+          const tools = orchestrated
+            ? {
+                ...baseTools,
+                ...this.orchestrator.buildDispatchTools({
+                  requestId: options.requestId,
+                  sessionId,
+                  userId,
+                  currentMessageId,
+                  parentSignal: totalSignal,
+                  mutationState: requestMutationState,
+                  vertical: verticalId,
+                  onRoleDispatched: (role) => {
+                    if (!dispatchedRoles.includes(role)) {
+                      dispatchedRoles.push(role);
+                    }
+                  },
+                }),
+              }
+            : baseTools;
 
           const tracer = trace.getTracer('langfuse-sdk');
           const rootSpan = tracer.startSpan('video-storyboard-chat');
@@ -804,6 +818,7 @@ export class VideoService {
     currentAssets: VideoAsset[] | undefined,
     role: RoleProfile,
     vertical: VerticalProfile,
+    orchestrated = false,
   ): Promise<string> {
     const [assets, latestScript, activeTask] = await Promise.all([
       currentAssets ??
@@ -875,6 +890,10 @@ export class VideoService {
       }
     }
 
+    // 编排模式下要求导演走多 Agent 流水线，并把产出汇总后自己落库
+    if (orchestrated && role.dispatches?.length) {
+      prompt += `\n## 多 Agent 编排\n${vertical.orchestrationInstructions}\n`;
+    }
     prompt += `\n## 指南路由\n${vertical.guideRouting}\n`;
 
     const durationHint = vertical.durationHint.replaceAll(

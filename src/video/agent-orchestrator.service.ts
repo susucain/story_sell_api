@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { isStepCount, tool, ToolLoopAgent, zodSchema } from 'ai';
 import { z } from 'zod/v4';
 import {
@@ -39,6 +40,8 @@ export interface OrchestratorToolContext {
   mutationState?: VideoAgentMutationState;
   /** 当前会话垂类，透传给子 Agent 的工具与解析策略 */
   vertical?: string;
+  /** 每次成功分派一个角色后回调，供调用方记录分派状态（如落库前置校验、过程面板） */
+  onRoleDispatched?: (role: RoleId) => void;
 }
 
 export interface OrchestratorRunRequest {
@@ -65,7 +68,20 @@ export class AgentOrchestratorService {
     private readonly llmService: VideoLLMService,
     private readonly toolsService: VideoToolsService,
     private readonly executionService: VideoAgentExecutionService,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * 多 Agent 编排开关，默认开启。
+   * VIDEO_AGENT_ORCHESTRATION=0/false/off/disabled 时回退到单 Agent 路径。
+   */
+  isEnabled(): boolean {
+    const raw = this.config.get<string>('VIDEO_AGENT_ORCHESTRATION');
+    if (!raw) return true;
+    return !['0', 'false', 'off', 'disabled'].includes(
+      raw.trim().toLowerCase(),
+    );
+  }
 
   /**
    * 按导演给出的顺序依次执行子 Agent，并在整轮总预算内收窄每个角色的预算。
@@ -128,7 +144,7 @@ export class AgentOrchestratorService {
       }),
       dispatch_role_agent: tool({
         description:
-          '把一项专业任务分派给指定角色子 Agent（编剧/导演/摄影），返回该角色的产出。仅在需要拆分或咨询专业角色时使用；常规脚本创作仍由你自己调用 start_script_creation / generate_script 完成。',
+          '把一项专业任务分派给指定角色子 Agent（编剧 screenwriter / 分镜导演 shot-planner / 摄影 cinematographer / 质检 reviewer），返回该角色的产出。创作或修改脚本时必须先按 编剧 → 分镜导演 → 摄影 的顺序分派，再汇总产出保存脚本。',
         inputSchema: zodSchema(
           z.object({
             role: z.enum([
@@ -150,6 +166,7 @@ export class AgentOrchestratorService {
             dispatch: [input.role],
             context,
           });
+          context.onRoleDispatched?.(input.role);
           return { role: input.role, output: outputs[0]?.output ?? '' };
         },
       }),

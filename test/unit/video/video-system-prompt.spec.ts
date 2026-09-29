@@ -53,7 +53,11 @@ describe('VideoService system prompt', () => {
     creativeBrief: {},
   } as VideoSession;
 
-  const build = (roleId: RoleId, verticalId = 'life-service') => {
+  const build = (
+    roleId: RoleId,
+    verticalId = 'life-service',
+    orchestrated = false,
+  ) => {
     const { service } = createService();
     return (service as any).buildSystemPrompt(
       emptySession,
@@ -62,6 +66,7 @@ describe('VideoService system prompt', () => {
       [],
       registry.getRoleProfile(roleId),
       getVerticalProfile(verticalId),
+      orchestrated,
     ) as Promise<string>;
   };
 
@@ -101,6 +106,30 @@ describe('VideoService system prompt', () => {
     );
     expect(prompt).toContain('## 指南路由');
     expect(prompt).toContain('## 持久化约束');
+  });
+
+  it('adds the multi-agent pipeline section in orchestrated mode', async () => {
+    const prompt = await build('director', 'life-service', true);
+
+    expect(prompt).toContain('## 多 Agent 编排');
+    expect(prompt).toContain('dispatch_role_agent');
+    expect(prompt).toContain('screenwriter');
+    expect(prompt).toContain('shot-planner');
+    expect(prompt).toContain('cinematographer');
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThan(8000);
+  });
+
+  it('omits the orchestration section outside orchestrated mode', async () => {
+    const prompt = await build('director');
+
+    expect(prompt).not.toContain('## 多 Agent 编排');
+    expect(prompt).not.toContain('dispatch_role_agent');
+  });
+
+  it('does not push the pipeline onto advisor roles', async () => {
+    const prompt = await build('screenwriter', 'life-service', true);
+
+    expect(prompt).not.toContain('## 多 Agent 编排');
   });
 
   it('omits the new-script duration hint when editing an existing video', async () => {

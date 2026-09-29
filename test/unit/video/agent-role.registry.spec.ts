@@ -18,20 +18,33 @@ describe('AgentRoleRegistryService', () => {
     );
   });
 
-  it('scopes the screenwriter away from video generation tools', () => {
-    const profile = registry.getRoleProfile('screenwriter');
+  it('scopes advisor roles away from persistence and video generation', () => {
+    for (const roleId of [
+      'screenwriter',
+      'shot-planner',
+      'cinematographer',
+    ] as const) {
+      const profile = registry.getRoleProfile(roleId);
 
-    expect(profile.allowedTools).not.toContain('create_video_task');
-    expect(profile.allowedTools).toContain('generate_script');
+      expect(profile.allowedTools).not.toContain('create_video_task');
+      expect(profile.allowedTools).not.toContain('start_script_creation');
+      expect(profile.allowedTools).not.toContain('generate_script');
+      expect(profile.allowedTools).toContain('read_file');
+    }
   });
 
-  it('only lets the director trigger video generation', () => {
+  it('only lets the director persist scripts and trigger video generation', () => {
     const withGeneration = registry
       .listRoleProfiles()
       .filter((profile) => profile.allowedTools.includes('create_video_task'))
       .map((profile) => profile.id);
+    const withPersistence = registry
+      .listRoleProfiles()
+      .filter((profile) => profile.allowedTools.includes('generate_script'))
+      .map((profile) => profile.id);
 
     expect(withGeneration).toEqual(['director']);
+    expect(withPersistence).toEqual(['director']);
   });
 
   it('rejects an unknown role id', () => {

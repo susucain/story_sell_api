@@ -33,6 +33,10 @@ interface ToolContext {
   referencedVersion?: number;
   /** 当前会话垂类，决定分镜解析策略；缺省按 life-service 处理 */
   vertical?: string;
+  /** 编排模式下要求 generate_script 之前必须已分派角色子 Agent */
+  requireDispatch?: boolean;
+  /** 已成功分派的角色列表，由编排工具回填 */
+  dispatchedRoles?: string[];
   waitingForUser?: boolean;
   scriptUnchanged?: boolean;
   parentSignal?: AbortSignal;
@@ -424,6 +428,14 @@ export class VideoToolsService {
         seedance_prompt,
         meta,
       }, executionContext: ToolExecutionContext = {}) => {
+        // 编排模式下要求先分派角色子 Agent，避免导演跳过流水线自行代写
+        if (ctx.requireDispatch && (ctx.dispatchedRoles?.length ?? 0) === 0) {
+          return {
+            success: false,
+            message:
+              '编排模式下必须先调用 dispatch_role_agent 依次分派 screenwriter、shot-planner、cinematographer，汇总其产出后再保存脚本',
+          };
+        }
         if (ctx.waitingForUser || ctx.scriptUnchanged) {
           return {
             success: false,

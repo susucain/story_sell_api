@@ -11,6 +11,8 @@ export interface VerticalProfile {
   persistenceConstraints: string;
   /** 新建脚本时附带的时长/画幅建议，写入 {durationHint} 占位符。 */
   durationHint: string;
+  /** 编排模式下的多 Agent 分派要求，仅挂到具备 dispatches 的角色（总导演）上。 */
+  orchestrationInstructions: string;
 }
 
 export const DEFAULT_VERTICAL_ID = 'life-service';
@@ -37,6 +39,12 @@ export const VERTICAL_PROFILES: Record<string, VerticalProfile> = {
     ].join('\n'),
     durationHint:
       'generate_script 的 meta 建议填写 duration（视频总时长，秒，上限 {maxDurationSec} 秒）和 ratio（9:16、16:9 或 1:1），并与 storyboard_markdown 的总时长保持一致。',
+    orchestrationInstructions: [
+      '创作或修改脚本时，先调用 start_script_creation 进入创作流程并调用 submit_creative_brief 沉淀本轮创作简报，随后按以下流水线依次调用 dispatch_role_agent 分派 screenwriter（编剧）→ shot-planner（分镜导演）→ cinematographer（摄影），不要跳过。',
+      '每次分派都要把创作简报和上游角色的产出作为上下文传给该角色；不得臆造角色产出。角色产出不完整时再次分派补齐，不要自己代写该角色负责的内容。',
+      '汇总三个角色的产出后，由你自己调用 generate_script 保存脚本；用户确认已保存脚本后才调用 create_video_task。',
+      '仅问答、素材分析、创作简报更新、查询脚本或视频状态以及已确认脚本的视频生成，不需要分派。',
+    ].join('\n'),
   },
 };
 
