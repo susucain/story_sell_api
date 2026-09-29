@@ -34,6 +34,16 @@ import {
   VideoAgentMutationState,
   VideoAgentTimeoutError,
 } from './video-agent-execution.service';
+import {
+  AgentRoleRegistryService,
+  RoleId,
+  RoleProfile,
+} from './agent-role.registry';
+import {
+  DEFAULT_VERTICAL_ID,
+  getVerticalProfile,
+  VerticalProfile,
+} from './vertical-profile.registry';
 
 const RECENT_MESSAGE_LIMIT = 6;
 
@@ -58,6 +68,7 @@ export class VideoService {
     private taskService: VideoTaskService,
     private assetAnalysisService: VideoAssetAnalysisService,
     private readonly executionService: VideoAgentExecutionService,
+    private readonly roleRegistry: AgentRoleRegistryService,
   ) {}
 
   async ensureSession(
@@ -287,6 +298,9 @@ export class VideoService {
             referencedScript,
             sourceVideoAsset,
             refreshedAssets,
+            // 编排层（Task 5）落地前，单 Agent 先以总导演角色 + 生活服务垂类运行
+            this.roleRegistry.getRoleProfile('director' satisfies RoleId),
+            getVerticalProfile(DEFAULT_VERTICAL_ID),
           );
           const tools = this.toolsService.buildTools({
             requestId: options.requestId,
@@ -754,7 +768,9 @@ export class VideoService {
     session: VideoSession,
     referencedScript: VideoScript | null,
     sourceVideoAsset: VideoAsset | null,
-    currentAssets?: VideoAsset[],
+    currentAssets: VideoAsset[] | undefined,
+    role: RoleProfile,
+    vertical: VerticalProfile,
   ): Promise<string> {
     const [assets, latestScript, activeTask] = await Promise.all([
       currentAssets ??
@@ -781,7 +797,7 @@ export class VideoService {
         where: { sessionId: session.sessionId, userId: session.userId },
         order: { updatedAt: 'DESC' },
       }));
-    let prompt = `你是映语 AI 达人带货视频工作台。帮助用户为商品生成带货视频分镜脚本，并支持一键生成视频。\n`;
+    let prompt = `${role.identity}\n`;
     prompt += `当前会话 ID：${session.sessionId}\n`;
     prompt += `当前会话状态：${session.status}\n`;
 
@@ -826,23 +842,21 @@ export class VideoService {
       }
     }
 
-    prompt += `\n## 指南路由\n`;
-    prompt += `脚本创作或修改：先读取 \`life-service-storyboard-generator/references/routing.md\`、\`life-service-storyboard-generator/references/storyboard.md\` 和 \`life-service-storyboard-generator/references/seedance.md\`。\n`;
-    prompt += `涉及角色、系统虚拟人、上传人像或服装：在上述三份之外，再读取 \`life-service-storyboard-generator/references/character.md\`。\n`;
-    prompt += `仅查询视频状态、结果或失败原因，以及仅分析素材时：不要读取创作指南。仅优化或检查 Seedance 提示词时：读取 \`life-service-storyboard-generator/references/seedance.md\`。\n`;
-    prompt += `按需读取专项资料：按视频类型读取 \`life-service-storyboard-generator/references/type-configuration-center.md\` 的对应段落；按 Seedance 格式读取 \`life-service-storyboard-generator/references/seedance_2_0_template.md\`。每次调用 generate_script 保存 seedance_prompt 前，必须读取 \`sd2-pe/SKILL.md\` 完成审查。\n`;
-    prompt += `所有指南和专项资料均按需读取；不得将其完整内容自动注入系统提示词。\n`;
+    prompt += `\n## 指南路由\n${vertical.guideRouting}\n`;
 
-    prompt += `\n## 持久化约束\n`;
-    prompt += `每轮创作或修改脚本都必须先调用 start_script_creation（本会话之前调用过也要重新调用；未调用前不得读取创作指南或调用 generate_script）；普通问候、素材分析、商品画像更新、知识问答和已确认脚本的视频生成不得调用它。\n`;
-    prompt += `准备完成后必须调用 generate_script 保存 title、storyboard_markdown、seedance_prompt 和 meta；仅在保存成功后才可确认脚本已生成。用户确认已保存脚本后才可调用 create_video_task。\n`;
-    prompt += `视频模型单次生成上限为 ${MAX_VIDEO_DURATION_SEC} 秒，脚本总时长、最后一个镜头结束时间和提交的生成时长都不得超过 ${MAX_VIDEO_DURATION_SEC} 秒。\n`;
-    if (!sourceVideoAsset) {
-      prompt += `generate_script 的 meta 建议填写 duration（视频总时长，秒，上限 ${MAX_VIDEO_DURATION_SEC} 秒）和 ratio（9:16、16:9 或 1:1），并与 storyboard_markdown 的总时长保持一致。\n`;
-    }
-    prompt += `修改已有脚本先调用 get_script；若内容已满足要求，调用 complete_without_script_change，不创建新版本。缺少必要时间范围、素材、角色选择或存在冲突时，调用 request_user_confirmation 后停止创作。\n`;
-    prompt += `查询已保存脚本或提示词先用 get_script，需要选择版本先用 list_scripts；查询视频任务先用 get_video_task_status；查询会话状态或上下文先用 get_session_state，不得猜测持久化数据。\n`;
-    prompt += `用户给出商品名称、卖点、受众、时长、平台或风格时，及时调用 update_product_profile。除非用户明确要求查看已保存内容，不在对话中输出完整分镜或 Seedance 提示词。\n`;
+    const durationHint = vertical.durationHint.replaceAll(
+      '{maxDurationSec}',
+      String(MAX_VIDEO_DURATION_SEC),
+    );
+    const persistenceLines = vertical.persistenceConstraints
+      .split('\n')
+      .map((line) =>
+        line
+          .replaceAll('{maxDurationSec}', String(MAX_VIDEO_DURATION_SEC))
+          .replace('{durationHint}', sourceVideoAsset ? '' : durationHint),
+      )
+      .filter((line) => line !== '');
+    prompt += `\n## 持久化约束\n${persistenceLines.join('\n')}\n`;
 
     if (sourceVideoAsset) {
       const durationSec = sourceVideoAsset.parsedContent!.durationSec;

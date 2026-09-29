@@ -73,6 +73,8 @@ describe('VideoService session search', () => {
       undefined as never,
       undefined as never,
       undefined as never,
+      undefined as never,
+      undefined as never,
     );
   });
 

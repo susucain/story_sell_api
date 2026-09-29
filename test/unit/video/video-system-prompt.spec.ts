@@ -13,8 +13,15 @@ jest.mock('@ai-sdk/openai-compatible', () => ({
 
 import { VideoService } from '../../../src/video/video.service';
 import { VideoSession } from '../../../src/video/entities/video-session.entity';
+import {
+  AgentRoleRegistryService,
+  RoleId,
+} from '../../../src/video/agent-role.registry';
+import { getVerticalProfile } from '../../../src/video/vertical-profile.registry';
 
 describe('VideoService system prompt', () => {
+  const registry = new AgentRoleRegistryService();
+
   const createService = () => {
     const repo = {
       find: jest.fn().mockResolvedValue([]),
@@ -31,6 +38,8 @@ describe('VideoService system prompt', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
+      registry,
     );
 
     return { service };
@@ -43,10 +52,20 @@ describe('VideoService system prompt', () => {
     productProfile: {},
   } as VideoSession;
 
-  it('routes creation guidance without injecting the full skill', async () => {
+  const build = (roleId: RoleId, verticalId = 'life-service') => {
     const { service } = createService();
+    return (service as any).buildSystemPrompt(
+      emptySession,
+      null,
+      null,
+      [],
+      registry.getRoleProfile(roleId),
+      getVerticalProfile(verticalId),
+    ) as Promise<string>;
+  };
 
-    const prompt = await (service as any).buildSystemPrompt(emptySession, null, null, []);
+  it('routes creation guidance without injecting the full skill', async () => {
+    const prompt = await build('director');
 
     expect(prompt).toContain('references/routing.md');
     expect(prompt).toContain('references/storyboard.md');
@@ -61,10 +80,45 @@ describe('VideoService system prompt', () => {
   });
 
   it('keeps the fixed empty-session prompt below 8000 UTF-8 bytes', async () => {
-    const { service } = createService();
-
-    const prompt = await (service as any).buildSystemPrompt(emptySession, null, null, []);
+    const prompt = await build('director');
 
     expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThan(8000);
+  });
+
+  it('renders the active role identity instead of a hardcoded workbench name', async () => {
+    const prompt = await build('screenwriter');
+
+    expect(prompt).not.toContain('映语 AI 达人带货视频工作台');
+    expect(prompt).toContain(registry.getRoleProfile('screenwriter').identity);
+  });
+
+  it('routes guides from the active vertical profile', async () => {
+    const prompt = await build('director', 'life-service');
+
+    expect(prompt).toContain(
+      'life-service-storyboard-generator/references/routing.md',
+    );
+    expect(prompt).toContain('## 指南路由');
+    expect(prompt).toContain('## 持久化约束');
+  });
+
+  it('omits the new-script duration hint when editing an existing video', async () => {
+    const { service } = createService();
+    const sourceVideoAsset = {
+      id: 9,
+      parsedContent: { durationSec: 12 },
+    } as any;
+
+    const prompt = (await (service as any).buildSystemPrompt(
+      emptySession,
+      null,
+      sourceVideoAsset,
+      [],
+      registry.getRoleProfile('director'),
+      getVerticalProfile('life-service'),
+    )) as string;
+
+    expect(prompt).not.toContain('generate_script 的 meta 建议填写 duration');
+    expect(prompt).toContain('编辑模式锁定');
   });
 });
