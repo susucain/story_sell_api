@@ -1,4 +1,5 @@
 import {
+  buildProcessState,
   ProcessAction,
   ProcessCard,
   ProcessItem,
@@ -414,6 +415,43 @@ export class ProcessTracker {
   /** 判断某工具是否属于本次创作流程 */
   static isGenerationTool(toolName: string): boolean {
     return GENERATION_TOOLS.has(toolName);
+  }
+
+  /** 子 Agent 被分派：按角色追加一个过程阶段（已存在则置为进行中） */
+  markRoleDispatched(roleId: string, title: string) {
+    if (!this.started || this.finished) return;
+    this.hasGenerationActivity = true;
+    const phaseId = `dispatch-${roleId}`;
+    const existing = this.state.phases.find((phase) => phase.id === phaseId);
+    if (existing) {
+      existing.status = 'running';
+      existing.startTime = existing.startTime ?? this.now();
+    } else {
+      const [phase] = buildProcessState(
+        [
+          {
+            id: phaseId,
+            title,
+            description: `${title}正在处理分派任务`,
+          },
+        ],
+        { startTime: this.now() },
+      ).phases;
+      this.state.phases.push(phase);
+    }
+    this.emit();
+  }
+
+  /** 子 Agent 分派任务完成 */
+  markRoleCompleted(roleId: string) {
+    if (!this.started || this.finished) return;
+    const phase = this.state.phases.find(
+      (item) => item.id === `dispatch-${roleId}`,
+    );
+    if (!phase || phase.status === 'completed') return;
+    phase.status = 'completed';
+    phase.endTime = this.now();
+    this.emit();
   }
 
   private markPhaseDone(phaseId: ProcessPhase['id']) {

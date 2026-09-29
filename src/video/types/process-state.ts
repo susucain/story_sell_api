@@ -33,7 +33,8 @@ export interface ProcessOutput {
 }
 
 export interface ProcessPhase {
-  id: 'parse-materials' | 'load-guidelines' | 'generate-script';
+  /** 阶段标识。life-service 使用固定三阶段，多 Agent 场景使用 `dispatch-<role>` */
+  id: string;
   title: string;
   description: string;
   status: ProcessStatus;
@@ -59,4 +60,42 @@ export interface ProcessState {
 export interface ProcessStateDataPart {
   type: 'data-process-state';
   data: ProcessState;
+}
+
+/** 过程阶段描述：由业务侧（含多 Agent 编排）声明，代替固定的阶段联合类型 */
+export interface ProcessPhaseDescriptor {
+  id: string;
+  title: string;
+  description?: string;
+  status?: ProcessStatus;
+}
+
+export interface BuildProcessStateOptions {
+  status?: ProcessStatus;
+  startTime?: number;
+  endTime?: number;
+}
+
+/** 用阶段描述列表构建过程状态：首个阶段默认 running，其余 pending */
+export function buildProcessState(
+  descriptors: ProcessPhaseDescriptor[],
+  options: BuildProcessStateOptions = {},
+): ProcessState {
+  const phases: ProcessPhase[] = descriptors.map((descriptor, index) => {
+    const status = descriptor.status ?? (index === 0 ? 'running' : 'pending');
+    return {
+      id: descriptor.id,
+      title: descriptor.title,
+      description: descriptor.description ?? '',
+      status,
+      startTime: status === 'running' ? options.startTime : undefined,
+    };
+  });
+
+  return {
+    status: options.status ?? 'running',
+    startTime: options.startTime,
+    endTime: options.endTime,
+    phases,
+  };
 }

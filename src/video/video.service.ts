@@ -36,6 +36,7 @@ import {
 } from './video-agent-execution.service';
 import {
   AgentRoleRegistryService,
+  ROLE_PROFILES,
   RoleId,
   RoleProfile,
 } from './agent-role.registry';
@@ -545,6 +546,18 @@ export class VideoService {
         });
         return;
       }
+      // 多 Agent 分派：按角色追加过程阶段（编排为增量能力，未分派时不影响现有流程）
+      if (toolName === 'dispatch_role_agent') {
+        const roleId = typeof input?.role === 'string' ? input.role : '';
+        if (roleId && Object.hasOwn(ROLE_PROFILES, roleId)) {
+          tracker.start();
+          tracker.markRoleDispatched(
+            roleId,
+            this.roleRegistry.getRoleProfile(roleId as RoleId).displayName,
+          );
+        }
+        return;
+      }
       if (!ProcessTracker.isGenerationTool(toolName)) return;
 
       if (toolName === 'update_creative_brief') {
@@ -564,7 +577,10 @@ export class VideoService {
       const toolName = toolCallMap.get(toolCallId);
       if (!toolName) return;
 
-      if (toolName === 'update_creative_brief') {
+      if (toolName === 'dispatch_role_agent') {
+        const roleId = typeof output?.role === 'string' ? output.role : '';
+        if (roleId) tracker.markRoleCompleted(roleId);
+      } else if (toolName === 'update_creative_brief') {
         tracker.markProfileUpdated(output?.profile);
       } else if (
         toolName === 'complete_without_script_change' &&
