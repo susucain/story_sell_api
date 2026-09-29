@@ -8,22 +8,25 @@ export interface SkillMeta {
   trigger: string;
 }
 
-export const VIDEO_SKILLS = {
-  'life-service-storyboard-generator':
-    'life-service-storyboard-generator/SKILL.md',
-  'sd2-pe': 'sd2-pe/SKILL.md',
-} as const;
+export class SkillNotFoundError extends Error {
+  readonly code = 'SKILL_NOT_FOUND';
 
-export type VideoSkillName = keyof typeof VIDEO_SKILLS;
+  constructor(skillName: string) {
+    super(`未知 video skill：${skillName}`);
+    this.name = 'SkillNotFoundError';
+  }
+}
 
-export const VIDEO_REFERENCES = {
-  routing: 'life-service-storyboard-generator/references/routing.md',
-  character: 'life-service-storyboard-generator/references/character.md',
-  storyboard: 'life-service-storyboard-generator/references/storyboard.md',
-  seedance: 'life-service-storyboard-generator/references/seedance.md',
-} as const;
+const SKILL_ENTRY_FILE = 'SKILL.md';
+const REFERENCES_DIR = 'references';
 
-export type VideoReferenceName = keyof typeof VIDEO_REFERENCES;
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: string }).code === 'ENOENT'
+  );
+}
 
 @Injectable()
 export class SkillLoaderService {
@@ -31,8 +34,28 @@ export class SkillLoaderService {
     ? path.resolve(process.env.SKILLS_DIR)
     : path.resolve(process.cwd(), 'src/video/skills');
 
-  async loadMeta(skillName: VideoSkillName = 'life-service-storyboard-generator'): Promise<SkillMeta> {
-    const content = await this.readSkillFile(this.getSkillPath(skillName));
+  /** 扫描 skills 目录，返回所有声明了 SKILL.md 的技能元信息。 */
+  async listSkills(): Promise<SkillMeta[]> {
+    const entries = await fs
+      .readdir(this.skillsDir, { withFileTypes: true })
+      .catch(() => []);
+    const metas = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          try {
+            return await this.loadMeta(entry.name);
+          } catch {
+            return null;
+          }
+        }),
+    );
+    return metas.filter((meta): meta is SkillMeta => meta !== null);
+  }
+
+  /** 按目录名加载技能元信息，未知技能抛出 SkillNotFoundError。 */
+  async loadMeta(skillName: string): Promise<SkillMeta> {
+    const content = await this.readSkillFile(skillName, SKILL_ENTRY_FILE);
     const match = content.match(/^---\n([\s\S]*?)\n---/);
     if (!match) {
       return { name: '', description: '', trigger: '' };
@@ -45,25 +68,58 @@ export class SkillLoaderService {
     };
   }
 
-  async loadReference(referenceName: VideoReferenceName): Promise<string> {
-    if (!Object.hasOwn(VIDEO_REFERENCES, referenceName)) {
+  /** 扫描指定技能的 references 目录，返回不带扩展名的参考文件名称。 */
+  async listReferences(skillName: string): Promise<string[]> {
+    const referencesDir = this.resolveInsideSkills(skillName, REFERENCES_DIR);
+    const entries = await fs
+      .readdir(referencesDir, { withFileTypes: true })
+      .catch(() => []);
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+      .map((entry) => entry.name.slice(0, -'.md'.length))
+      .sort();
+  }
+
+  /** 读取指定技能下某个参考文件的完整内容。 */
+  async loadReference(
+    skillName: string,
+    referenceName: string,
+  ): Promise<string> {
+    const references = await this.listReferences(skillName);
+    if (!references.includes(referenceName)) {
       throw new Error(`未知 video reference：${referenceName}`);
     }
-    const referencePath = VIDEO_REFERENCES[referenceName];
-    return this.readSkillFile(referencePath);
+    return this.readSkillFile(
+      skillName,
+      path.join(REFERENCES_DIR, `${referenceName}.md`),
+    );
   }
 
-  private getSkillPath(skillName: string): string {
-    const skillPath = VIDEO_SKILLS[skillName as VideoSkillName];
-    if (!skillPath) {
-      throw new Error(`未知 video skill：${skillName}`);
+  private async readSkillFile(
+    skillName: string,
+    relativePath: string,
+  ): Promise<string> {
+    const fullPath = this.resolveInsideSkills(skillName, relativePath);
+    try {
+      return await fs.readFile(fullPath, 'utf-8');
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        throw new SkillNotFoundError(skillName);
+      }
+      throw error;
     }
-    return skillPath;
   }
 
-  private async readSkillFile(relativePath: string): Promise<string> {
-    const fullPath = path.join(this.skillsDir, relativePath);
-    return fs.readFile(fullPath, 'utf-8');
+  /** 解析 skills 目录内的路径，越界的技能名一律视为未找到。 */
+  private resolveInsideSkills(...segments: string[]): string {
+    const fullPath = path.resolve(this.skillsDir, ...segments);
+    const root = this.skillsDir.endsWith(path.sep)
+      ? this.skillsDir
+      : `${this.skillsDir}${path.sep}`;
+    if (!fullPath.startsWith(root)) {
+      throw new SkillNotFoundError(segments[0] ?? '');
+    }
+    return fullPath;
   }
 
   private extractField(frontmatter: string, key: string): string {

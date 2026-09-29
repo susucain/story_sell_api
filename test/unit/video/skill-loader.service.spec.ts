@@ -14,11 +14,38 @@ describe('SkillLoaderService', () => {
     }
   });
 
-  it('loads the storyboard skill by default', async () => {
+  it('discovers every skill that declares a SKILL.md', async () => {
     const loader = new SkillLoaderService();
-    const meta = await loader.loadMeta();
+    const registry = await loader.listSkills();
 
-    expect(meta.name).toBe('life-service-storyboard-generator');
+    expect(registry.map((skill) => skill.name)).toEqual(
+      expect.arrayContaining(['life-service-storyboard-generator', 'sd2-pe']),
+    );
+  });
+
+  it('lists the references bundled with a skill', async () => {
+    const loader = new SkillLoaderService();
+    const references = await loader.listReferences(
+      'life-service-storyboard-generator',
+    );
+
+    expect(references).toEqual(
+      expect.arrayContaining(['routing', 'character', 'storyboard', 'seedance']),
+    );
+  });
+
+  it('returns no references for a skill without a references directory', async () => {
+    const loader = new SkillLoaderService();
+
+    await expect(loader.listReferences('sd2-pe')).resolves.toEqual([]);
+  });
+
+  it('loads a skill by its directory name', async () => {
+    const loader = new SkillLoaderService();
+
+    await expect(
+      loader.loadMeta('life-service-storyboard-generator'),
+    ).resolves.toMatchObject({ name: 'life-service-storyboard-generator' });
   });
 
   it('loads the Seedance prompt optimizer by name', async () => {
@@ -28,26 +55,49 @@ describe('SkillLoaderService', () => {
     expect(meta.name).toBe('sd2-pe');
   });
 
-  it('rejects an unknown skill name', async () => {
+  it('raises a typed error for an unknown skill name', async () => {
     const loader = new SkillLoaderService();
-    await expect(loader.loadMeta('missing-skill' as any)).rejects.toThrow('未知 video skill');
+
+    await expect(loader.loadMeta('missing-skill')).rejects.toMatchObject({
+      code: 'SKILL_NOT_FOUND',
+    });
   });
 
-  it.each(['routing', 'character', 'storyboard', 'seedance'] as const)(
-    'loads the %s video reference by name',
+  it('rejects skill names that escape the skills directory', async () => {
+    const loader = new SkillLoaderService();
+
+    await expect(loader.loadMeta('../secret')).rejects.toMatchObject({
+      code: 'SKILL_NOT_FOUND',
+    });
+  });
+
+  it.each(['routing', 'character', 'storyboard', 'seedance'])(
+    'loads the %s reference for a skill',
     async (referenceName) => {
       const loader = new SkillLoaderService();
 
-      await expect(loader.loadReference(referenceName)).resolves.toContain('#');
+      await expect(
+        loader.loadReference(
+          'life-service-storyboard-generator',
+          referenceName,
+        ),
+      ).resolves.toContain('#');
     },
   );
 
-  it('rejects unknown and traversal reference paths', async () => {
+  it('rejects unknown and traversal reference names', async () => {
     const loader = new SkillLoaderService();
+    const skill = 'life-service-storyboard-generator';
 
-    await expect(loader.loadReference('missing' as any)).rejects.toThrow('未知 video reference');
-    await expect(loader.loadReference('../SKILL' as any)).rejects.toThrow('未知 video reference');
-    await expect(loader.loadReference('toString' as any)).rejects.toThrow('未知 video reference');
+    await expect(loader.loadReference(skill, 'missing')).rejects.toThrow(
+      '未知 video reference',
+    );
+    await expect(loader.loadReference(skill, '../SKILL')).rejects.toThrow(
+      '未知 video reference',
+    );
+    await expect(loader.loadReference(skill, 'toString')).rejects.toThrow(
+      '未知 video reference',
+    );
   });
 
   it('loads skills from SKILLS_DIR in production', async () => {
@@ -62,9 +112,9 @@ describe('SkillLoaderService', () => {
 
     try {
       const loader = new SkillLoaderService();
-      await expect(loader.loadMeta()).resolves.toMatchObject({
-        name: 'production-skill',
-      });
+      await expect(
+        loader.loadMeta('life-service-storyboard-generator'),
+      ).resolves.toMatchObject({ name: 'production-skill' });
     } finally {
       await rm(skillsDir, { recursive: true, force: true });
     }
