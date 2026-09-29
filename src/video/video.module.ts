@@ -12,6 +12,7 @@ import { VideoScript } from './entities/video-script.entity';
 import { VideoLLMService } from './video-llm.service';
 import { SkillLoaderService } from './skill-loader.service';
 import { AgentRoleRegistryService } from './agent-role.registry';
+import { AgentOrchestratorService } from './agent-orchestrator.service';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoToolsService } from './video-tools.service';
 import { VideoPersistenceProcessor } from './video-persistence.processor';
@@ -29,6 +30,7 @@ import { OssModule } from '../oss/oss.module';
     VideoLLMService,
     SkillLoaderService,
     AgentRoleRegistryService,
+    AgentOrchestratorService,
     StoryboardParserService,
     VideoToolsService,
     VideoPersistenceProcessor,

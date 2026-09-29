@@ -39,6 +39,7 @@ import {
   RoleId,
   RoleProfile,
 } from './agent-role.registry';
+import { AgentOrchestratorService } from './agent-orchestrator.service';
 import {
   DEFAULT_VERTICAL_ID,
   getVerticalProfile,
@@ -69,6 +70,7 @@ export class VideoService {
     private assetAnalysisService: VideoAssetAnalysisService,
     private readonly executionService: VideoAgentExecutionService,
     private readonly roleRegistry: AgentRoleRegistryService,
+    private readonly orchestrator: AgentOrchestratorService,
   ) {}
 
   async ensureSession(
@@ -302,7 +304,7 @@ export class VideoService {
             this.roleRegistry.getRoleProfile('director' satisfies RoleId),
             getVerticalProfile(DEFAULT_VERTICAL_ID),
           );
-          const tools = this.toolsService.buildTools({
+          const baseTools = this.toolsService.buildTools({
             requestId: options.requestId,
             sessionId,
             userId,
@@ -319,6 +321,18 @@ export class VideoService {
                 }
               : undefined,
           });
+          // 编排工具为增量能力：导演不主动调用时，流程与工具集行为保持不变
+          const tools = {
+            ...baseTools,
+            ...this.orchestrator.buildDispatchTools({
+              requestId: options.requestId,
+              sessionId,
+              userId,
+              currentMessageId,
+              parentSignal: totalSignal,
+              mutationState: requestMutationState,
+            }),
+          };
 
           const tracer = trace.getTracer('langfuse-sdk');
           const rootSpan = tracer.startSpan('video-storyboard-chat');

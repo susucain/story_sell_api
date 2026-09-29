@@ -49,6 +49,7 @@ const DEFAULTS = {
   toolTimeoutMs: 30000,
   scriptSaveTimeoutMs: 45000,
   totalTimeoutMs: 300000,
+  roleAgentTimeoutMs: 120000,
   assetAnalysisConcurrency: 3,
 } as const;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -62,6 +63,7 @@ export class VideoAgentExecutionService {
   readonly toolTimeoutMs: number;
   readonly scriptSaveTimeoutMs: number;
   readonly totalTimeoutMs: number;
+  readonly roleAgentTimeoutMs: number;
   readonly assetAnalysisConcurrency: number;
 
   constructor(configService: ConfigService) {
@@ -89,6 +91,11 @@ export class VideoAgentExecutionService {
       configService,
       'VIDEO_AGENT_TOTAL_TIMEOUT_MS',
       DEFAULTS.totalTimeoutMs,
+    );
+    this.roleAgentTimeoutMs = this.readPositiveInteger(
+      configService,
+      'VIDEO_AGENT_ROLE_TIMEOUT_MS',
+      DEFAULTS.roleAgentTimeoutMs,
     );
     this.assetAnalysisConcurrency = this.readPositiveInteger(
       configService,
@@ -175,6 +182,25 @@ export class VideoAgentExecutionService {
         phase: 'agent_total',
         timeoutMs: this.totalTimeoutMs,
         timeoutCode: 'AGENT_TOTAL_TIMEOUT',
+      },
+      work,
+    );
+  }
+
+  /**
+   * 单个角色子 Agent 的预算：默认使用 roleAgentTimeoutMs，
+   * 由编排层按剩余总预算收窄时可通过 timeoutMs 覆盖。
+   */
+  runRoleAgent<T>(
+    context: VideoAgentPhaseContext & { timeoutMs?: number },
+    work: VideoAgentPhaseWork<T>,
+  ): Promise<T> {
+    return this.run(
+      {
+        ...context,
+        phase: 'role_agent',
+        timeoutMs: context.timeoutMs ?? this.roleAgentTimeoutMs,
+        timeoutCode: 'MODEL_TIMEOUT',
       },
       work,
     );

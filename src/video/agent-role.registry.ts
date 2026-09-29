@@ -39,7 +39,7 @@ export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
     id: 'director',
     displayName: '总导演',
     identity:
-      '你是视频创作的编排者（总导演），负责理解用户意图、把创作任务拆解并分派给编剧、导演与摄影角色，汇总产出并决定是否需要生成视频。',
+      '你是视频创作的负责人（总导演），负责理解用户意图、统筹脚本创作与视频生成；必要时把专业任务分派给编剧、导演、摄影等角色。',
     allowedSkills: ['life-service-storyboard-generator'],
     allowedTools: [
       'read_file',

@@ -40,6 +40,7 @@ describe('VideoService system prompt', () => {
       {} as any,
       {} as any,
       registry,
+      undefined as never,
     );
 
     return { service };
