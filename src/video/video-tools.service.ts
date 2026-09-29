@@ -37,6 +37,8 @@ interface ToolContext {
   requireDispatch?: boolean;
   /** 已成功分派的角色列表，由编排工具回填 */
   dispatchedRoles?: string[];
+  /** 本会话已成功读取的技能文件（规范化相对路径，小写）；由 read_file 回填，用于保存前的强制审查校验 */
+  readFiles?: Set<string>;
   waitingForUser?: boolean;
   scriptUnchanged?: boolean;
   parentSignal?: AbortSignal;
@@ -78,7 +80,7 @@ export class VideoToolsService {
   buildTools(ctx: ToolContext, role?: RoleProfile) {
     const allTools = {
       start_script_creation: this.buildStartScriptCreationTool(),
-      read_file: this.buildReadFileTool(),
+      read_file: this.buildReadFileTool(ctx),
       write_file: this.buildWriteFileTool(),
       update_creative_brief: this.buildUpdateCreativeBriefTool(ctx),
       generate_script: this.buildGenerateScriptTool(ctx),
@@ -257,7 +259,22 @@ export class VideoToolsService {
     return resolved;
   }
 
-  private buildReadFileTool() {
+  /** 归一化技能相对路径（统一分隔符与小写），用于判断某文件是否已被读取过 */
+  private normalizeSkillPath(relativePath: string): string {
+    return relativePath.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+  }
+
+  /** 判断本轮是否已读取 sd2-pe 规则文件 */
+  private hasReviewedSeedanceSkill(ctx: ToolContext): boolean {
+    // 未启用读取追踪时不阻断，避免影响未接线的调用方
+    if (!ctx.readFiles) return true;
+    for (const file of ctx.readFiles) {
+      if (file.endsWith('sd2-pe/skill.md')) return true;
+    }
+    return false;
+  }
+
+  private buildReadFileTool(ctx: ToolContext) {
     return tool({
       description:
         '按需读取视频创作指南和专项资料。核心路径：life-service-storyboard-generator/references/{routing,character,storyboard,seedance}.md；专项路径：life-service-storyboard-generator/references/type-configuration-center.md、seedance_2_0_template.md、sd2-pe/SKILL.md。',
@@ -274,6 +291,7 @@ export class VideoToolsService {
         try {
           const fullPath = this.resolveSkillPath(relativePath);
           const content = await fs.readFile(fullPath, 'utf-8');
+          ctx.readFiles?.add(this.normalizeSkillPath(relativePath));
           return { path: relativePath, content };
         } catch (err: any) {
           return { path: relativePath, error: err.message ?? '文件读取失败' };
@@ -434,6 +452,14 @@ export class VideoToolsService {
             success: false,
             message:
               '编排模式下必须先调用 dispatch_role_agent 依次分派 screenwriter、shot-planner、cinematographer，汇总其产出后再保存脚本',
+          };
+        }
+        // sd2-pe 是生成 Seedance 提示词的强制规范，保存前必须已读取并按其约束审查
+        if (!this.hasReviewedSeedanceSkill(ctx)) {
+          return {
+            success: false,
+            message:
+              '保存 seedance_prompt 前必须先调用 read_file 读取 sd2-pe/SKILL.md，逐条落实其强制约束后再保存',
           };
         }
         if (ctx.waitingForUser || ctx.scriptUnchanged) {

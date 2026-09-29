@@ -43,7 +43,7 @@ export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
     displayName: '总导演',
     identity:
       '你是视频创作的负责人（总导演），负责理解用户意图、沉淀创作简报、按流水线把专业任务分派给编剧、分镜导演与摄影角色，汇总其产出后亲自保存脚本，并决定是否需要生成视频。',
-    allowedSkills: ['life-service-storyboard-generator'],
+    allowedSkills: ['life-service-storyboard-generator', 'sd2-pe'],
     allowedTools: [
       'start_script_creation',
       'read_file',
@@ -80,7 +80,7 @@ export const ROLE_PROFILES: Record<RoleId, RoleProfile> = {
     id: 'cinematographer',
     displayName: '摄影',
     identity:
-      '你是摄影指导，负责画面、运镜与 Seedance 提示词的视觉表达。你只返回内容，不落库、不触发视频生成。',
+      '你是摄影指导，负责画面、运镜与 Seedance 提示词的视觉表达。产出任何 seedance_prompt 前必须先读取 sd2-pe/SKILL.md，逐条落实其强制约束（八要素、任务分类、单镜头单运镜、特殊字符、画质/稳定/水印 Logo 兜底等）。你只返回内容，不落库、不触发视频生成。',
     allowedSkills: ['life-service-storyboard-generator', 'sd2-pe'],
     allowedTools: ADVISOR_TOOLS,
     outputSchemaHint: '返回每个镜头的 seedance_prompt。',

@@ -311,6 +311,8 @@ export class VideoService {
           );
           // 已分派角色列表在导演与编排工具之间共享，用于 generate_script 的前置校验
           const dispatchedRoles: string[] = [];
+          // 已读技能文件在导演与角色子 Agent 之间共享，用于 sd2-pe 审查的前置校验
+          const readFiles = new Set<string>();
           const baseTools = this.toolsService.buildTools({
             requestId: options.requestId,
             sessionId,
@@ -323,6 +325,7 @@ export class VideoService {
             vertical: verticalId,
             requireDispatch: orchestrated,
             dispatchedRoles,
+            readFiles,
             fullVideoEdit: sourceVideoAsset
               ? {
                   sourceAssetId: sourceVideoAsset.id,
@@ -343,6 +346,7 @@ export class VideoService {
                   parentSignal: totalSignal,
                   mutationState: requestMutationState,
                   vertical: verticalId,
+                  readFiles,
                   onRoleDispatched: (role) => {
                     if (!dispatchedRoles.includes(role)) {
                       dispatchedRoles.push(role);

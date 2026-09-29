@@ -48,6 +48,14 @@ export class SeedancePromptValidatorService {
       changes.push('已补齐无文字画面约束');
     }
 
+    const missingMandatoryPackages = this.findMissingMandatoryPackages(normalized);
+    if (missingMandatoryPackages.length > 0) {
+      normalized = `${normalized.trim()}\n\n${missingMandatoryPackages
+        .map((pack) => pack.text)
+        .join('；')}。`;
+      changes.push(...missingMandatoryPackages.map((pack) => pack.change));
+    }
+
     return { prompt: normalized, changes };
   }
 
@@ -95,6 +103,10 @@ export class SeedancePromptValidatorService {
       errors.push('Seedance 提示词不能要求生成画面文字、字幕、标题、标语、手牌文字或按钮，所有文字请在后期添加。');
     }
 
+    if (this.hasUnwrappedDialogue(normalized)) {
+      errors.push('台词必须使用 {…} 包裹（如 {你好，世界}），不要用引号直述。');
+    }
+
     if (!/(?:高清|画质|电影质感|细节丰富)/.test(normalized)) {
       warnings.push('建议补充画质约束，例如“高清，细节丰富，电影质感”。');
     }
@@ -105,12 +117,59 @@ export class SeedancePromptValidatorService {
       warnings.push('建议补充“不要生成水印；不要生成 Logo”约束。');
     }
 
-    const subjectCount = new Set([...normalized.matchAll(/<主体(\d+)>/g)].map((match) => match[1])).size;
-    if (subjectCount > 1 && !/(?:双胞胎|分身|人物重复|重复复刻)/.test(normalized)) {
+    if (this.countSubjects(normalized) > 1 && !/(?:双胞胎|分身|人物重复|重复复刻)/.test(normalized)) {
       warnings.push('多人场景建议补充禁止人物重复或双胞胎效果的约束。');
     }
 
     return { errors, warnings };
+  }
+
+  /**
+   * sd2-pe「强制兜底」中默认必挂的约束包；缺失时在 normalize 阶段自动补齐并披露，
+   * 多人 / 多主体场景额外必挂双胞胎兜底，避免仅靠提示词提醒而被忽略。
+   */
+  private readonly mandatoryPackages: Array<{
+    change: string;
+    present: RegExp;
+    text: string;
+    multiSubjectOnly?: boolean;
+  }> = [
+    {
+      change: '已补齐画质包',
+      present: /(?:高清|画质|电影质感|细节丰富)/,
+      text: '高清，细节丰富，电影质感，色彩自然，光影柔和',
+    },
+    {
+      change: '已补齐稳定包',
+      present: /(?:稳定不变形|动作连贯|无穿模|无卡顿|画面稳定|面部稳定)/,
+      text: '人物面部稳定不变形、五官清晰、动作连贯自然，不僵硬，无穿模无卡顿',
+    },
+    {
+      change: '已补齐水印/Logo 兜底',
+      present:
+        /(?:不要生成水印|无水印)[\s\S]*(?:不要生成\s*Logo|无\s*Logo)|(?:不要生成\s*Logo|无\s*Logo)[\s\S]*(?:不要生成水印|无水印)/i,
+      text: '不要生成水印；不要生成 Logo',
+    },
+    {
+      change: '已补齐双胞胎兜底',
+      present: /(?:双胞胎|分身|人物重复|重复复刻)/,
+      text: '视频全程禁止出现外形、着装、配饰完全一致的人物，禁止生成同款分身、双胞胎效果，同一画面中仅保留单个对应人物，不出现人物重复复刻',
+      multiSubjectOnly: true,
+    },
+  ];
+
+  private findMissingMandatoryPackages(prompt: string) {
+    const subjectCount = this.countSubjects(prompt);
+    return this.mandatoryPackages.filter(
+      (pack) =>
+        (!pack.multiSubjectOnly || subjectCount > 1) && !pack.present.test(prompt),
+    );
+  }
+
+  private countSubjects(prompt: string): number {
+    return new Set(
+      [...prompt.matchAll(/<主体(\d+)>/g)].map((match) => match[1]),
+    ).size;
   }
 
   private normalizeLineEndings(prompt: string): string {
@@ -139,6 +198,15 @@ export class SeedancePromptValidatorService {
 
   private hasNoTextConstraint(prompt: string): boolean {
     return /(?:保持|全程|画面)?\s*(?:无字幕|不含字幕|禁止字幕)[，,；;、\s]*(?:避免|禁止|不得)\s*(?:生成|出现|显示)?\s*(?:任何)?\s*(?:文字|字幕)/.test(prompt);
+  }
+
+  /** sd2-pe 特殊字符规范：台词必须用 {} 包裹，禁止用引号直述。 */
+  private hasUnwrappedDialogue(prompt: string): boolean {
+    const speechVerbs =
+      '说道|说出|说|讲到|问道|问|答道|回答|喊道|喊|低语|嘟囔|念道|唱道|介绍道|嘱咐道|笑道|补充道|回应|自言自语';
+    return new RegExp(
+      `(?:${speechVerbs})[：:]?\\s*[“"「『][^”"」』\\n]{1,80}[”"」』]`,
+    ).test(prompt);
   }
 
   private hasVisualTextInstruction(prompt: string): boolean {

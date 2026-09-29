@@ -40,6 +40,8 @@ export interface OrchestratorToolContext {
   mutationState?: VideoAgentMutationState;
   /** 当前会话垂类，透传给子 Agent 的工具与解析策略 */
   vertical?: string;
+  /** 与导演共享的已读技能文件集合，子 Agent 读取 sd2-pe 等文件时同步记录 */
+  readFiles?: Set<string>;
   /** 每次成功分派一个角色后回调，供调用方记录分派状态（如落库前置校验、过程面板） */
   onRoleDispatched?: (role: RoleId) => void;
 }
@@ -201,6 +203,7 @@ export class AgentOrchestratorService {
               parentSignal: signal,
               mutationState: context.mutationState,
               vertical: context.vertical ?? brief.vertical,
+              readFiles: context.readFiles,
             },
             role,
           ),

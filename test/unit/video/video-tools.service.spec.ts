@@ -63,6 +63,34 @@ describe('VideoToolsService role scoping', () => {
     expect(result.message).toContain('dispatch_role_agent');
   });
 
+  it('blocks generate_script until the sd2-pe rules have been read', async () => {
+    const tools = createService().buildTools({
+      ...ctx,
+      readFiles: new Set<string>(),
+    });
+
+    const result = await (
+      tools as Record<string, { execute: Function }>
+    ).generate_script.execute(
+      { title: 't', storyboard_markdown: '', seedance_prompt: '', meta: {} },
+      {},
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('sd2-pe/SKILL.md');
+  });
+
+  it('records read skill files so the sd2-pe review can be verified', async () => {
+    const readFiles = new Set<string>();
+    const tools = createService().buildTools({ ...ctx, readFiles });
+
+    await (
+      tools as Record<string, { execute: Function }>
+    ).read_file.execute({ path: 'sd2-pe/SKILL.md' }, {});
+
+    expect([...readFiles]).toContain('sd2-pe/skill.md');
+  });
+
   it('exposes exactly the whitelisted tools for a role', () => {
     const role = ROLE_PROFILES.cinematographer;
 

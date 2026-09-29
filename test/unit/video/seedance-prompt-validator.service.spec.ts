@@ -138,4 +138,55 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.errors).toEqual([]);
     expect(result.warnings).toContainEqual(expect.stringContaining('双胞胎'));
   });
+
+  it('auto-fills the mandatory fallback packages during normalization', () => {
+    const result = validator.normalize(
+      '参考 @图片1 中的<主体1>，生成她坐在窗边吃蛋糕的画面。',
+    );
+
+    expect(result.changes).toEqual(
+      expect.arrayContaining([
+        '已补齐画质包',
+        '已补齐稳定包',
+        '已补齐水印/Logo 兜底',
+      ]),
+    );
+    expect(result.prompt).toContain('高清，细节丰富，电影质感');
+    expect(result.prompt).toContain('动作连贯自然');
+    expect(result.prompt).toContain('不要生成水印；不要生成 Logo');
+    expect(validator.validate(result.prompt).errors).toEqual([]);
+  });
+
+  it('auto-fills duplicate-character constraints for multi-subject prompts', () => {
+    const result = validator.normalize(
+      '<主体1> 与 <主体2> 在餐桌旁交谈。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.changes).toContain('已补齐双胞胎兜底');
+    expect(result.prompt).toContain('双胞胎效果');
+  });
+
+  it('does not duplicate fallback packages that are already present', () => {
+    const result = validator.normalize(
+      '参考 @图片1 中的<主体1>，生成她坐在窗边吃蛋糕的画面。高清，细节丰富，电影质感；人物面部稳定不变形、动作连贯自然，无穿模无卡顿；保持无字幕，避免生成任何文字或字幕；不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.changes).toEqual([]);
+  });
+
+  it('rejects dialogue written with quotes instead of braces', () => {
+    const result = validator.validate(
+      '镜头1：近景，<主体1> 低头笑着说“骗你们的”，舍友追着打闹。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toContainEqual(expect.stringContaining('台词必须使用'));
+  });
+
+  it('accepts dialogue wrapped in braces', () => {
+    const result = validator.validate(
+      '镜头1：近景，<主体1> 低头笑着说 {骗你们的}，舍友追着打闹。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toEqual([]);
+  });
 });
