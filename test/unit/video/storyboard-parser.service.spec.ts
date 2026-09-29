@@ -75,13 +75,42 @@ describe('StoryboardParserService', () => {
     const narrative = service.parse(NARRATIVE_SAMPLE, {
       vertical: 'narrative',
     });
-    const plain = service.parse(PLAIN_SAMPLE);
 
     expect(narrative.meta.duration).toBe(30);
     expect(narrative.meta.ratio).toBe('16:9');
-    expect(plain.meta.duration).toBe(15);
-    expect(plain.meta.ratio).toBe('9:16');
-    expect(plain.meta.platform).toBe('抖音/小红书');
+  });
+
+  it('reads explicit meta values from bold key lines', () => {
+    const parsed = service.parse(LIFE_SERVICE_SAMPLE);
+
+    expect(parsed.meta.duration).toBe(12);
+    expect(parsed.meta.ratio).toBe('9:16');
+    expect(parsed.meta.platform).toBe('抖音');
+  });
+
+  it('reads meta values written as list items or quotes', () => {
+    const markdown = [
+      '# 脚本',
+      '- **总时长**：20秒',
+      '> - **画幅**：16:9',
+      '* **视觉风格**：电影感',
+      '### 镜头 1：开场 (0s - 5s)',
+      '- **画面描述**：画面',
+    ].join('\n');
+
+    const parsed = service.parse(markdown);
+
+    expect(parsed.meta.duration).toBe(20);
+    expect(parsed.meta.ratio).toBe('16:9');
+    expect(parsed.meta.style).toBe('电影感');
+  });
+
+  it('falls back to the strategy defaults when meta lines are absent', () => {
+    const parsed = service.parse(PLAIN_SAMPLE);
+
+    expect(parsed.meta.duration).toBe(15);
+    expect(parsed.meta.ratio).toBe('9:16');
+    expect(parsed.meta.platform).toBe('抖音/小红书');
   });
 
   it('extracts the title and hook from the first shot', () => {

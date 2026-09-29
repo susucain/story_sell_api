@@ -110,8 +110,12 @@ export class StoryboardParserService {
     const meta: ParsedStoryboard['meta'] = { ...defaults };
 
     for (const line of lines) {
-      // 兼容 "**时长**：15秒"、"- **时长**：15秒"、"> - **时长**：15秒" 等写法
-      const normalized = line.trim().replace(/^[>\-*\s]+/, '');
+      // 兼容 "**时长**：15秒"、"- **时长**：15秒"、"> - **时长**：15秒"、* 列表项 等写法。
+      // 注意：不能把 `*` 一起剥离，否则会吃掉加粗标记 `**`，导致 `**总时长**：…` 永远匹配不上。
+      const normalized = line
+        .trim()
+        .replace(/^[>\-\s]+/, '')
+        .replace(/^\*\s+/, '');
       const readValue = (key: string): string | null => {
         if (!normalized.startsWith(`**${key}**`)) return null;
         const value = normalized
