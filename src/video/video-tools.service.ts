@@ -18,6 +18,7 @@ import {
   validateAvatarOutfitSelection,
 } from './avatar-catalog';
 import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
+import { RoleProfile } from './agent-role.registry';
 import {
   VideoAgentExecutionService,
   VideoAgentMutationState,
@@ -68,25 +69,33 @@ export class VideoToolsService {
     private readonly executionService: VideoAgentExecutionService,
   ) {}
 
-  buildTools(ctx: ToolContext) {
-    return this.withExecutionDeadlines(
-      {
-        start_script_creation: this.buildStartScriptCreationTool(),
-        read_file: this.buildReadFileTool(),
-        write_file: this.buildWriteFileTool(),
-        update_product_profile: this.buildUpdateProductProfileTool(ctx),
-        generate_script: this.buildGenerateScriptTool(ctx),
-        complete_without_script_change:
-          this.buildCompleteWithoutScriptChangeTool(ctx),
-        request_user_confirmation: this.buildRequestUserConfirmationTool(ctx),
-        create_video_task: this.buildCreateVideoTaskTool(ctx),
-        get_script: this.buildGetScriptTool(ctx),
-        list_scripts: this.buildListScriptsTool(ctx),
-        get_video_task_status: this.buildGetVideoTaskStatusTool(ctx),
-        get_session_state: this.buildGetSessionStateTool(ctx),
-      },
-      ctx,
-    );
+  buildTools(ctx: ToolContext, role?: RoleProfile) {
+    const allTools = {
+      start_script_creation: this.buildStartScriptCreationTool(),
+      read_file: this.buildReadFileTool(),
+      write_file: this.buildWriteFileTool(),
+      update_product_profile: this.buildUpdateProductProfileTool(ctx),
+      generate_script: this.buildGenerateScriptTool(ctx),
+      complete_without_script_change:
+        this.buildCompleteWithoutScriptChangeTool(ctx),
+      request_user_confirmation: this.buildRequestUserConfirmationTool(ctx),
+      create_video_task: this.buildCreateVideoTaskTool(ctx),
+      get_script: this.buildGetScriptTool(ctx),
+      list_scripts: this.buildListScriptsTool(ctx),
+      get_video_task_status: this.buildGetVideoTaskStatusTool(ctx),
+      get_session_state: this.buildGetSessionStateTool(ctx),
+    };
+
+    // 不传角色时返回全量工具，作为编排层（Task 5）落地前的过渡行为
+    const tools = role
+      ? Object.fromEntries(
+          Object.entries(allTools).filter(([name]) =>
+            role.allowedTools.includes(name),
+          ),
+        )
+      : allTools;
+
+    return this.withExecutionDeadlines(tools, ctx);
   }
 
   private withExecutionDeadlines<T extends Record<string, any>>(
