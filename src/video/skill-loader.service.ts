@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Dirent } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -36,9 +37,12 @@ export class SkillLoaderService {
 
   /** 扫描 skills 目录，返回所有声明了 SKILL.md 的技能元信息。 */
   async listSkills(): Promise<SkillMeta[]> {
-    const entries = await fs
-      .readdir(this.skillsDir, { withFileTypes: true })
-      .catch(() => []);
+    let entries: Dirent[] = [];
+    try {
+      entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
+    } catch {
+      entries = [];
+    }
     const metas = await Promise.all(
       entries
         .filter((entry) => entry.isDirectory())
@@ -71,9 +75,12 @@ export class SkillLoaderService {
   /** 扫描指定技能的 references 目录，返回不带扩展名的参考文件名称。 */
   async listReferences(skillName: string): Promise<string[]> {
     const referencesDir = this.resolveInsideSkills(skillName, REFERENCES_DIR);
-    const entries = await fs
-      .readdir(referencesDir, { withFileTypes: true })
-      .catch(() => []);
+    let entries: Dirent[] = [];
+    try {
+      entries = await fs.readdir(referencesDir, { withFileTypes: true });
+    } catch {
+      entries = [];
+    }
     return entries
       .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
       .map((entry) => entry.name.slice(0, -'.md'.length))
