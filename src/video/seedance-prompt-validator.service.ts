@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { MUST_CONTAIN_RULES, PROHIBITION_RULES } from './seedance-rules';
 
 export interface SeedancePromptValidationResult {
   errors: string[];
@@ -37,23 +38,20 @@ export class SeedancePromptValidatorService {
     const shotBlocks = normalized.match(/镜头\s*\d+[\s\S]*?(?=镜头\s*\d+|$)/g) ?? [];
     if (shotBlocks.length >= 2) {
       const withoutAbsoluteTimes = this.removeMultiShotAbsoluteTimes(normalized);
-      if (withoutAbsoluteTimes !== normalized) {
+      const normalizeChange = PROHIBITION_RULES.absoluteShotTime.normalizeChange;
+      if (withoutAbsoluteTimes !== normalized && normalizeChange) {
         normalized = withoutAbsoluteTimes;
-        changes.push('已删除多镜头绝对时间码');
+        changes.push(normalizeChange);
       }
     }
 
-    if (!this.hasNoTextConstraint(normalized)) {
-      normalized = `${normalized.trim()}\n\n保持无字幕，避免生成任何文字或字幕。`;
-      changes.push('已补齐无文字画面约束');
-    }
-
-    const missingMandatoryPackages = this.findMissingMandatoryPackages(normalized);
-    if (missingMandatoryPackages.length > 0) {
-      normalized = `${normalized.trim()}\n\n${missingMandatoryPackages
-        .map((pack) => pack.text)
+    // sd2-pe「强制兜底」默认必挂：缺失即自动补齐并透明披露
+    const missingRules = this.findMissingMustContainRules(normalized);
+    if (missingRules.length > 0) {
+      normalized = `${normalized.trim()}\n\n${missingRules
+        .map((rule) => rule.appendText)
         .join('；')}。`;
-      changes.push(...missingMandatoryPackages.map((pack) => pack.change));
+      changes.push(...missingRules.map((rule) => rule.normalizeMessage));
     }
 
     return { prompt: normalized, changes };
@@ -65,15 +63,15 @@ export class SeedancePromptValidatorService {
     const normalized = this.normalizeLineEndings(prompt);
 
     if (/\[?asset-[\w-]+\]?/i.test(normalized)) {
-      errors.push('Seedance 提示词不能直接使用 asset ID，请改用 @图片N、@视频N 或 @音频N 引用素材。');
+      errors.push(PROHIBITION_RULES.rawAssetId.message);
     }
 
     if (/@(?:图片|视频|音频)\d+(?=(?:跑|走|站|坐|拿|向|往|在|位于|左|右|前|后))/.test(normalized)) {
-      errors.push('素材引用后紧接动作或方位会产生歧义，请使用 <主体N>@图片N 或在引用后补充名词。');
+      errors.push(PROHIBITION_RULES.ambiguousAssetReference.message);
     }
 
     if (/(?:严格编辑|向前延长|向后延长|延长)[\s\S]*?参考\s*@视频\d+|参考\s*@视频\d+[\s\S]*?(?:严格编辑|向前延长|向后延长|延长)/.test(normalized)) {
-      errors.push('视频编辑或延长任务不能写“参考 @视频N”，请直接使用“严格编辑 @视频N”或“向前/向后延长 @视频N”。');
+      errors.push(PROHIBITION_RULES.editReference.message);
     }
 
     const shotBlocks = normalized.match(/镜头\s*\d+[\s\S]*?(?=镜头\s*\d+|$)/g) ?? [];
@@ -83,93 +81,33 @@ export class SeedancePromptValidatorService {
           .map((match) => match[0].replace(/镜头|机位/g, '')),
       );
       if (cameraMoves.size > 1) {
-        errors.push('同一镜头只能指定一种运镜方式，请拆分或保留一个运镜。');
+        errors.push(PROHIBITION_RULES.conflictingCameraMove.message);
         break;
       }
     }
 
     const absoluteTimePattern = /(?:\d{1,2}:\d{2}(?::\d{2})?\s*[-~–—至到]\s*\d{1,2}:\d{2}(?::\d{2})?|\d+\s*(?:秒|s)|\d+\s*[-~–—至到]\s*\d+\s*(?:秒|s))/i;
     if (shotBlocks.length >= 2 && absoluteTimePattern.test(normalized)) {
-      errors.push(
-        '多镜头 Seedance 提示词请使用镜头顺序，不要写绝对秒数或时间码。删除如“0-3秒”“0:00-0:03”的标记，仅保留“镜头1 / 镜头2 / 镜头3”。',
-      );
-    }
-
-    if (!this.hasNoTextConstraint(normalized)) {
-      errors.push('Seedance 提示词必须包含“保持无字幕，避免生成任何文字或字幕”约束。');
+      errors.push(PROHIBITION_RULES.absoluteShotTime.message);
     }
 
     if (this.hasVisualTextInstruction(normalized)) {
-      errors.push('Seedance 提示词不能要求生成画面文字、字幕、标题、标语、手牌文字或按钮，所有文字请在后期添加。');
+      errors.push(PROHIBITION_RULES.visualTextInstruction.message);
     }
 
     if (this.hasUnwrappedDialogue(normalized)) {
-      errors.push('台词必须使用 {…} 包裹（如 {你好，世界}），不要用引号直述。');
+      errors.push(PROHIBITION_RULES.unwrappedDialogue.message);
     }
 
-    if (!/(?:高清|画质|电影质感|细节丰富)/.test(normalized)) {
-      warnings.push('建议补充画质约束，例如“高清，细节丰富，电影质感”。');
-    }
-    if (!/(?:稳定不变形|动作连贯|无穿模|无卡顿|画面稳定)/.test(normalized)) {
-      warnings.push('建议补充人物与动作稳定性约束。');
-    }
-    if (!/(?:不要生成水印|无水印).*(?:不要生成\s*Logo|无\s*Logo)|(?:不要生成\s*Logo|无\s*Logo).*(?:不要生成水印|无水印)/i.test(normalized)) {
-      warnings.push('建议补充“不要生成水印；不要生成 Logo”约束。');
-    }
-
-    if (this.countSubjects(normalized) > 1 && !/(?:双胞胎|分身|人物重复|重复复刻)/.test(normalized)) {
-      warnings.push('多人场景建议补充禁止人物重复或双胞胎效果的约束。');
+    for (const rule of this.findMissingMustContainRules(normalized)) {
+      if (rule.severity === 'error') {
+        errors.push(rule.validateMessage);
+      } else {
+        warnings.push(rule.validateMessage);
+      }
     }
 
     return { errors, warnings };
-  }
-
-  /**
-   * sd2-pe「强制兜底」中默认必挂的约束包；缺失时在 normalize 阶段自动补齐并披露，
-   * 多人 / 多主体场景额外必挂双胞胎兜底，避免仅靠提示词提醒而被忽略。
-   */
-  private readonly mandatoryPackages: Array<{
-    change: string;
-    present: RegExp;
-    text: string;
-    multiSubjectOnly?: boolean;
-  }> = [
-    {
-      change: '已补齐画质包',
-      present: /(?:高清|画质|电影质感|细节丰富)/,
-      text: '高清，细节丰富，电影质感，色彩自然，光影柔和',
-    },
-    {
-      change: '已补齐稳定包',
-      present: /(?:稳定不变形|动作连贯|无穿模|无卡顿|画面稳定|面部稳定)/,
-      text: '人物面部稳定不变形、五官清晰、动作连贯自然，不僵硬，无穿模无卡顿',
-    },
-    {
-      change: '已补齐水印/Logo 兜底',
-      present:
-        /(?:不要生成水印|无水印)[\s\S]*(?:不要生成\s*Logo|无\s*Logo)|(?:不要生成\s*Logo|无\s*Logo)[\s\S]*(?:不要生成水印|无水印)/i,
-      text: '不要生成水印；不要生成 Logo',
-    },
-    {
-      change: '已补齐双胞胎兜底',
-      present: /(?:双胞胎|分身|人物重复|重复复刻)/,
-      text: '视频全程禁止出现外形、着装、配饰完全一致的人物，禁止生成同款分身、双胞胎效果，同一画面中仅保留单个对应人物，不出现人物重复复刻',
-      multiSubjectOnly: true,
-    },
-  ];
-
-  private findMissingMandatoryPackages(prompt: string) {
-    const subjectCount = this.countSubjects(prompt);
-    return this.mandatoryPackages.filter(
-      (pack) =>
-        (!pack.multiSubjectOnly || subjectCount > 1) && !pack.present.test(prompt),
-    );
-  }
-
-  private countSubjects(prompt: string): number {
-    return new Set(
-      [...prompt.matchAll(/<主体(\d+)>/g)].map((match) => match[1]),
-    ).size;
   }
 
   private normalizeLineEndings(prompt: string): string {
@@ -196,8 +134,19 @@ export class SeedancePromptValidatorService {
       .replace(/[（(]\s*[）)]/g, '');
   }
 
-  private hasNoTextConstraint(prompt: string): boolean {
-    return /(?:保持|全程|画面)?\s*(?:无字幕|不含字幕|禁止字幕)[，,；;、\s]*(?:避免|禁止|不得)\s*(?:生成|出现|显示)?\s*(?:任何)?\s*(?:文字|字幕)/.test(prompt);
+  /** 按当前场景筛出缺失的必挂规则（多主体规则仅在 `<主体N>` 数量 > 1 时生效）。 */
+  private findMissingMustContainRules(prompt: string) {
+    const subjectCount = this.countSubjects(prompt);
+    return MUST_CONTAIN_RULES.filter(
+      (rule) =>
+        (!rule.multiSubjectOnly || subjectCount > 1) && !rule.present.test(prompt),
+    );
+  }
+
+  private countSubjects(prompt: string): number {
+    return new Set(
+      [...prompt.matchAll(/<主体(\d+)>/g)].map((match) => match[1]),
+    ).size;
   }
 
   /** sd2-pe 特殊字符规范：台词必须用 {} 包裹，禁止用引号直述。 */
