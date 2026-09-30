@@ -6,14 +6,18 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { ACCOUNT_PATTERN, normalizeAccount } from '../account';
+import {
+  ACCOUNT_ERROR_MESSAGE,
+  ACCOUNT_PATTERN,
+  normalizeAccount,
+} from '../account';
 
 export class RegisterDto {
   @Transform(({ value }: TransformFnParams) => normalizeAccount(value))
   @IsString()
   @IsNotEmpty()
   @Matches(ACCOUNT_PATTERN, {
-    message: '账号仅支持 3-64 位小写字母、数字、点、下划线或短横线',
+    message: ACCOUNT_ERROR_MESSAGE,
   })
   account: string;
 
