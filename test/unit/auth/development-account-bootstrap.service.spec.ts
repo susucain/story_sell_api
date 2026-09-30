@@ -71,7 +71,7 @@ describe('DevelopmentAccountBootstrapService', () => {
 
     expect(bcryptHash).toHaveBeenCalledWith(password, 12);
     expect(repository.update).toHaveBeenCalledWith(1, {
-      account: 'configured-dev',
+      account: 'Configured-Dev',
       passwordHash: 'new-password-hash',
     });
   });

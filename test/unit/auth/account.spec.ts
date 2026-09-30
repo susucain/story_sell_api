@@ -1,8 +1,8 @@
 import { ACCOUNT_PATTERN, normalizeAccount } from '../../../src/auth/account';
 
 describe('normalizeAccount', () => {
-  it('trims and lowercases an account identifier', () => {
-    expect(normalizeAccount('  Creator_01  ')).toBe('creator_01');
+  it('trims an account identifier without folding its case', () => {
+    expect(normalizeAccount('  Creator_01  ')).toBe('Creator_01');
   });
 
   it('leaves Chinese characters untouched', () => {
@@ -22,14 +22,15 @@ describe('ACCOUNT_PATTERN', () => {
     '小明2026',
     'user.name',
     'user-name',
-    'a'.repeat(64),
+    'Creator_01',
+    'a'.repeat(20),
   ])('accepts %s', (account) => {
     expect(ACCOUNT_PATTERN.test(account)).toBe(true);
   });
 
   it.each([
     ['two characters', 'ab'],
-    ['65 characters', 'a'.repeat(65)],
+    ['21 characters', 'a'.repeat(21)],
     ['whitespace', 'user name'],
     ['a leading underscore', '_user'],
     ['a leading dot', '.user'],
@@ -41,8 +42,8 @@ describe('ACCOUNT_PATTERN', () => {
     expect(ACCOUNT_PATTERN.test(account)).toBe(false);
   });
 
-  it('accepts a 64-character Chinese account', () => {
-    expect(ACCOUNT_PATTERN.test('创'.repeat(64))).toBe(true);
-    expect(ACCOUNT_PATTERN.test('创'.repeat(65))).toBe(false);
+  it('accepts a 20-character Chinese account', () => {
+    expect(ACCOUNT_PATTERN.test('创'.repeat(20))).toBe(true);
+    expect(ACCOUNT_PATTERN.test('创'.repeat(21))).toBe(false);
   });
 });

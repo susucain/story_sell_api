@@ -35,7 +35,6 @@ export class DevelopmentAccountBootstrapService
       );
     }
 
-    const normalizedAccount = account.toLowerCase();
     await this.dataSource.transaction(async (manager) => {
       const usersRepository = manager.getRepository(User);
       const user = await usersRepository.findOne({
@@ -48,7 +47,7 @@ export class DevelopmentAccountBootstrapService
       }
 
       const existingAccountOwner = await usersRepository.findOne({
-        where: { account: normalizedAccount },
+        where: { account },
       });
       if (existingAccountOwner && existingAccountOwner.id !== user.id) {
         throw new Error('DEV_ACCOUNT is already assigned to another user');
@@ -57,12 +56,12 @@ export class DevelopmentAccountBootstrapService
       const passwordMatches = user.passwordHash
         ? await this.passwordHasher.compare(password, user.passwordHash)
         : false;
-      if (user.account === normalizedAccount && passwordMatches) {
+      if (user.account === account && passwordMatches) {
         return;
       }
 
       await usersRepository.update(user.id, {
-        account: normalizedAccount,
+        account,
         passwordHash: await this.passwordHasher.hash(password, 12),
       });
     });

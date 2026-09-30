@@ -5,12 +5,13 @@
  * Note: `\p{Script=Han}` 需要 `u` 标志，覆盖基本区与扩展区的汉字。
  */
 export const ACCOUNT_PATTERN =
-  /^[\p{Script=Han}A-Za-z0-9][\p{Script=Han}A-Za-z0-9_.-]{2,63}$/u;
+  /^[\p{Script=Han}A-Za-z0-9][\p{Script=Han}A-Za-z0-9_.-]{2,19}$/u;
 
 /** 与 ACCOUNT_PATTERN 对应的用户提示，供注册与登录 DTO 复用。 */
 export const ACCOUNT_ERROR_MESSAGE =
-  '账号仅支持 3-64 位中文、字母、数字、下划线、点或短横线，且不能以下划线、点或短横线开头';
+  '账号仅支持 3-20 位中文、字母、数字、下划线、点或短横线，且不能以下划线、点或短横线开头';
 
+/** 仅去除首尾空白，大小写原样保留。 */
 export function normalizeAccount(value: unknown): unknown {
-  return typeof value === 'string' ? value.trim().toLowerCase() : value;
+  return typeof value === 'string' ? value.trim() : value;
 }
