@@ -82,6 +82,12 @@ export const MUST_CONTAIN_RULES: MustContainRule[] = [
   },
 ];
 
+/** 官方 API 参数与素材硬限制（Seedance 2.0 API 文档）。 */
+export const ASSET_REF_LIMITS = { image: 9, video: 3, audio: 3 } as const;
+
+/** 官方支持的最短生成时长（秒）。 */
+export const MIN_VIDEO_DURATION_SEC = 4;
+
 /** 禁止类规则：判定逻辑在 service 中实现，文案与条款映射登记于此。 */
 export interface ProhibitionRule {
   id: string;
@@ -134,6 +140,22 @@ export const PROHIBITION_RULES = {
     id: 'unwrappedDialogue',
     message: '台词必须使用 {…} 包裹（如 {你好，世界}），不要用引号直述。',
     skillClause: '特殊字符规范（强制使用）',
+  },
+  assetReferenceLimit: {
+    id: 'assetReferenceLimit',
+    message: `素材引用数量超出官方上限（图片 ≤ ${ASSET_REF_LIMITS.image} 张、视频 ≤ ${ASSET_REF_LIMITS.video} 个、音频 ≤ ${ASSET_REF_LIMITS.audio} 个），请删减参考素材或修正引用的序号。`,
+    skillClause: '参数与素材规范',
+  },
+  audioOnlyInput: {
+    id: 'audioOnlyInput',
+    message:
+      'Seedance 2.0 不支持「纯音频」与「文本 + 音频」输入，提示词必须至少引用一张参考图片或一段参考视频。',
+    skillClause: '参数与素材规范',
+  },
+  shortDuration: {
+    id: 'shortDuration',
+    message: `脚本总时长不足官方最短生成时长 ${MIN_VIDEO_DURATION_SEC} 秒，请补足镜头内容后重新保存。`,
+    skillClause: '参数与素材规范',
   },
 } as const satisfies Record<string, ProhibitionRule>;
 
@@ -207,5 +229,9 @@ export const SKILL_CLAUSE_COVERAGE: SkillClauseCoverage[] = [
     rules: [],
     advisoryReason:
       '大头照 + 全身照、禁用多视图属素材组织建议，不体现在最终提示词文本上。',
+  },
+  {
+    clause: '参数与素材规范',
+    rules: ['assetReferenceLimit', 'audioOnlyInput', 'shortDuration'],
   },
 ];

@@ -174,6 +174,40 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.changes).toEqual([]);
   });
 
+  it('rejects asset references beyond the official count limits', () => {
+    const tooManyImages = validator.validate(
+      '参考 @图片1 与 @图片10 中的<主体1>，生成画面。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+    const tooManyVideos = validator.validate(
+      '参考 @视频4 的运镜，生成画面。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(tooManyImages.errors).toContainEqual(
+      expect.stringContaining('素材引用数量超出官方上限'),
+    );
+    expect(tooManyVideos.errors).toContainEqual(
+      expect.stringContaining('素材引用数量超出官方上限'),
+    );
+  });
+
+  it('accepts asset references within the official count limits', () => {
+    const result = validator.validate(
+      '参考 @图片1、@图片2、@视频3 与 @音频3，生成画面。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('rejects audio-only prompts', () => {
+    const result = validator.validate(
+      '配合 @音频1 的节奏，生成画面。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toContainEqual(
+      expect.stringContaining('不支持「纯音频」与「文本 + 音频」输入'),
+    );
+  });
+
   it('rejects dialogue written with quotes instead of braces', () => {
     const result = validator.validate(
       '镜头1：近景，<主体1> 低头笑着说“骗你们的”，舍友追着打闹。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',

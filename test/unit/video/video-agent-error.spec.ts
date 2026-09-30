@@ -393,7 +393,7 @@ describe('video agent stream errors', () => {
       tools.generate_script.execute({
         title: '脚本',
         storyboard_markdown:
-          '### 镜头 1：开场 (0s - 3s)\n画面描述：商品\n旁白：介绍',
+          '### 镜头 1：开场 (0s - 5s)\n画面描述：商品\n旁白：介绍',
         seedance_prompt: '商品介绍',
         meta: {
           description: '商品介绍',
@@ -822,7 +822,7 @@ function scriptInput() {
   return {
     title: '脚本',
     storyboard_markdown:
-      '### 镜头 1：开场 (0s - 3s)\n画面描述：商品\n旁白：介绍',
+      '### 镜头 1：开场 (0s - 5s)\n画面描述：商品\n旁白：介绍',
     seedance_prompt: '商品介绍',
     meta: {
       description: '商品介绍',

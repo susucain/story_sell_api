@@ -18,6 +18,7 @@ import {
   validateAvatarOutfitSelection,
 } from './avatar-catalog';
 import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
+import { MIN_VIDEO_DURATION_SEC, PROHIBITION_RULES } from './seedance-rules';
 import { RoleProfile } from './agent-role.registry';
 import {
   VideoAgentExecutionService,
@@ -277,13 +278,13 @@ export class VideoToolsService {
   private buildReadFileTool(ctx: ToolContext) {
     return tool({
       description:
-        '按需读取视频创作指南和专项资料。核心路径：life-service-storyboard-generator/references/{routing,character,storyboard,seedance}.md；专项路径：life-service-storyboard-generator/references/type-configuration-center.md、seedance_2_0_template.md、sd2-pe/SKILL.md。',
+        '按需读取视频创作指南和专项资料。核心路径：life-service-storyboard-generator/references/{routing,character,storyboard,seedance}.md；专项路径：life-service-storyboard-generator/references/type-configuration-center.md、seedance_2_0_template.md、sd2-pe/SKILL.md；效果问题排查手册（按症状检索）：sd2-pe/references/seedance-2-troubleshooting-guide.md、sd2-pe/references/typical-effect-cases.md。',
       inputSchema: zodSchema(
         z.object({
           path: z
             .string()
             .describe(
-              '允许的按需路径：核心参考文件、type-configuration-center.md、seedance_2_0_template.md 或 sd2-pe/SKILL.md',
+              '允许的按需路径：核心参考文件、type-configuration-center.md、seedance_2_0_template.md、sd2-pe/SKILL.md，或 sd2-pe/references 下的排查手册',
             ),
         }),
       ),
@@ -646,6 +647,17 @@ export class VideoToolsService {
           }),
         );
         const effectiveDuration = Math.max(declaredDuration, lastShotEndSec);
+        // 引用视频修改沿用原视频时长，官方时长下限只约束新建脚本
+        if (
+          !meta.edit &&
+          effectiveDuration > 0 &&
+          effectiveDuration < MIN_VIDEO_DURATION_SEC
+        ) {
+          return {
+            success: false,
+            message: PROHIBITION_RULES.shortDuration.message,
+          };
+        }
         if (effectiveDuration > MAX_VIDEO_DURATION_SEC) {
           return {
             success: false,

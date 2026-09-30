@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { MUST_CONTAIN_RULES, PROHIBITION_RULES } from './seedance-rules';
+import {
+  ASSET_REF_LIMITS,
+  MUST_CONTAIN_RULES,
+  PROHIBITION_RULES,
+} from './seedance-rules';
 
 export interface SeedancePromptValidationResult {
   errors: string[];
@@ -64,6 +68,21 @@ export class SeedancePromptValidatorService {
 
     if (/\[?asset-[\w-]+\]?/i.test(normalized)) {
       errors.push(PROHIBITION_RULES.rawAssetId.message);
+    }
+
+    const assetRefs = this.countAssetReferences(normalized);
+    if (
+      assetRefs.image > ASSET_REF_LIMITS.image ||
+      assetRefs.video > ASSET_REF_LIMITS.video ||
+      assetRefs.audio > ASSET_REF_LIMITS.audio
+    ) {
+      errors.push(PROHIBITION_RULES.assetReferenceLimit.message);
+    } else if (
+      assetRefs.audio > 0 &&
+      assetRefs.image === 0 &&
+      assetRefs.video === 0
+    ) {
+      errors.push(PROHIBITION_RULES.audioOnlyInput.message);
     }
 
     if (/@(?:图片|视频|音频)\d+(?=(?:跑|走|站|坐|拿|向|往|在|位于|左|右|前|后))/.test(normalized)) {
@@ -141,6 +160,27 @@ export class SeedancePromptValidatorService {
       (rule) =>
         (!rule.multiSubjectOnly || subjectCount > 1) && !rule.present.test(prompt),
     );
+  }
+
+  /** 统计提示词引用到的素材最大序号（@图片N / @视频N / @音频N），用于校验官方数量上限 */
+  private countAssetReferences(prompt: string): {
+    image: number;
+    video: number;
+    audio: number;
+  } {
+    const maxIndex = (kind: string) =>
+      Math.max(
+        0,
+        ...[...prompt.matchAll(new RegExp(`@${kind}(\\d+)`, 'g'))].map((match) =>
+          Number(match[1]),
+        ),
+      );
+
+    return {
+      image: maxIndex('图片'),
+      video: maxIndex('视频'),
+      audio: maxIndex('音频'),
+    };
   }
 
   private countSubjects(prompt: string): number {

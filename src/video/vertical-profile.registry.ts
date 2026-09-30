@@ -25,7 +25,7 @@ export const VERTICAL_PROFILES: Record<string, VerticalProfile> = {
       '脚本创作或修改：先读取 `life-service-storyboard-generator/references/routing.md`、`life-service-storyboard-generator/references/storyboard.md` 和 `life-service-storyboard-generator/references/seedance.md`。',
       '涉及角色、系统虚拟人、上传人像或服装：在上述三份之外，再读取 `life-service-storyboard-generator/references/character.md`。',
       '仅查询视频状态、结果或失败原因，以及仅分析素材时：不要读取创作指南。仅优化或检查 Seedance 提示词时：读取 `life-service-storyboard-generator/references/seedance.md`。',
-      '按需读取专项资料：按视频类型读取 `life-service-storyboard-generator/references/type-configuration-center.md` 的对应段落；按 Seedance 格式读取 `life-service-storyboard-generator/references/seedance_2_0_template.md`。产出或保存 seedance_prompt 前，必须先读取 `sd2-pe/SKILL.md` 并逐条落实其强制约束（摄影角色产出与导演落库均适用），未读取不得保存。',
+      '按需读取专项资料：按视频类型读取 `life-service-storyboard-generator/references/type-configuration-center.md` 的对应段落；按 Seedance 格式读取 `life-service-storyboard-generator/references/seedance_2_0_template.md`。产出或保存 seedance_prompt 前，必须先读取 `sd2-pe/SKILL.md` 并逐条落实其强制约束（摄影角色产出与导演落库均适用），未读取不得保存；遇到换脸、双胞胎、穿模、字幕、台词、画质发油等具体效果问题时，按 `sd2-pe/SKILL.md` 末尾的排查手册索引读取 `sd2-pe/references/` 下的对应文件，不要凭印象作答。',
       '所有指南和专项资料均按需读取；不得将其完整内容自动注入系统提示词。',
     ].join('\n'),
     persistenceConstraints: [

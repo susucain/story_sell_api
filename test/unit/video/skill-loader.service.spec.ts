@@ -34,10 +34,34 @@ describe('SkillLoaderService', () => {
     );
   });
 
-  it('returns no references for a skill without a references directory', async () => {
+  it('lists the references bundled with sd2-pe', async () => {
     const loader = new SkillLoaderService();
+    const references = await loader.listReferences('sd2-pe');
 
-    await expect(loader.listReferences('sd2-pe')).resolves.toEqual([]);
+    expect(references).toEqual(
+      expect.arrayContaining([
+        'seedance-2-troubleshooting-guide',
+        'typical-effect-cases',
+      ]),
+    );
+  });
+
+  it('returns no references for a skill without a references directory', async () => {
+    const skillsDir = await mkdtemp(join(tmpdir(), 'video-skills-'));
+    const skillDir = join(skillsDir, 'bare-skill');
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: bare-skill\ndescription: test\ntrigger: always\n---\nContent',
+    );
+    process.env.SKILLS_DIR = skillsDir;
+
+    try {
+      const loader = new SkillLoaderService();
+      await expect(loader.listReferences('bare-skill')).resolves.toEqual([]);
+    } finally {
+      await rm(skillsDir, { recursive: true, force: true });
+    }
   });
 
   it('loads a skill by its directory name', async () => {
