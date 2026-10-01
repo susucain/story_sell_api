@@ -87,7 +87,9 @@ function createServiceDependencies() {
 function createSession(overrides: Partial<AuthSession> = {}): AuthSession {
   return {
     createdAt: new Date('2026-09-01T00:00:00.000Z'),
-    expiresAt: new Date('2026-10-01T00:00:00.000Z'),
+    // 相对当前时间构造：写死的过期时间一旦到点，refresh 会走 登录已失效 分支
+    // 让用例（和 CI）在某个时刻之后必然失败。这里对齐 JWT_REFRESH_TTL = 30d。
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     id: 'session-1',
     lastUsedAt: null,
     refreshTokenHash: 'stored-refresh-hash',
