@@ -66,15 +66,22 @@ production defaults:
 
 | Environment variable | Default | Scope |
 | --- | ---: | --- |
-| `VIDEO_AGENT_MODEL_FIRST_EVENT_TIMEOUT_MS` | 90,000 | No first model-stream event |
-| `VIDEO_AGENT_ASSET_PARSE_TIMEOUT_MS` | 90,000 | One asset analysis |
-| `VIDEO_AGENT_TOOL_TIMEOUT_MS` | 30,000 | Normal tool execution |
-| `VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS` | 45,000 | Script persistence tool |
-| `VIDEO_AGENT_TOTAL_TIMEOUT_MS` | 300,000 | Entire agent request |
+| `VIDEO_AGENT_MODEL_FIRST_EVENT_TIMEOUT_MS` | 180,000 | No first model-stream event |
+| `VIDEO_AGENT_ASSET_PARSE_TIMEOUT_MS` | 180,000 | One asset analysis |
+| `VIDEO_AGENT_TOOL_TIMEOUT_MS` | 60,000 | Normal tool execution |
+| `VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS` | 90,000 | Script persistence tool |
+| `VIDEO_AGENT_TOTAL_TIMEOUT_MS` | 900,000 | Entire agent request |
+| `VIDEO_AGENT_ROLE_TIMEOUT_MS` | 240,000 | One role sub-agent in orchestration mode |
 
-The Nginx `proxy_read_timeout` for `/video` and `/ai` must be 330 seconds so
-the application can emit its structured timeout response before the proxy
-closes the connection.
+Multi-agent orchestration dispatches 编剧 → 分镜导演 → 摄影 (plus an optional
+reviewer) sequentially, so `VIDEO_AGENT_TOTAL_TIMEOUT_MS` must exceed the sum of
+the dispatched role budgets plus the script save and director steps. The budgets
+above are the 2× values adopted for that mode.
+
+The Nginx `proxy_read_timeout` for `/video` and `/ai` must be
+`VIDEO_AGENT_TOTAL_TIMEOUT_MS` + 30 seconds (currently 930 seconds) so the
+application can emit its structured timeout response before the proxy closes the
+connection.
 
 A model or tool timeout cancels the active agent request and returns one of:
 

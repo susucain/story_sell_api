@@ -43,13 +43,16 @@ export interface VideoAgentPhaseOptions extends VideoAgentPhaseContext {
 
 export type VideoAgentPhaseWork<T> = (signal: AbortSignal) => Promise<T> | T;
 
+// 多 Agent 编排下导演串行分派 编剧 → 分镜导演 → 摄影（+可选质检），
+// 每个角色各占用一份 roleAgentTimeoutMs，因此总预算需覆盖多个角色之和。
+// 角色预算 × 3 再加保存与导演开销，须严格小于 totalTimeoutMs。
 const DEFAULTS = {
-  modelFirstEventTimeoutMs: 90000,
-  assetParseTimeoutMs: 90000,
-  toolTimeoutMs: 30000,
-  scriptSaveTimeoutMs: 45000,
-  totalTimeoutMs: 300000,
-  roleAgentTimeoutMs: 120000,
+  modelFirstEventTimeoutMs: 180000,
+  assetParseTimeoutMs: 180000,
+  toolTimeoutMs: 60000,
+  scriptSaveTimeoutMs: 90000,
+  totalTimeoutMs: 900000,
+  roleAgentTimeoutMs: 240000,
   assetAnalysisConcurrency: 3,
 } as const;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;

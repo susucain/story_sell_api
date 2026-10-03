@@ -227,11 +227,12 @@ describe('VideoAgentExecutionService', () => {
   it('uses defaults and accepts positive integer environment overrides', () => {
     const defaults = createService();
 
-    expect(defaults.modelFirstEventTimeoutMs).toBe(90000);
-    expect(defaults.assetParseTimeoutMs).toBe(90000);
-    expect(defaults.toolTimeoutMs).toBe(30000);
-    expect(defaults.scriptSaveTimeoutMs).toBe(45000);
-    expect(defaults.totalTimeoutMs).toBe(300000);
+    expect(defaults.modelFirstEventTimeoutMs).toBe(180000);
+    expect(defaults.assetParseTimeoutMs).toBe(180000);
+    expect(defaults.toolTimeoutMs).toBe(60000);
+    expect(defaults.scriptSaveTimeoutMs).toBe(90000);
+    expect(defaults.totalTimeoutMs).toBe(900000);
+    expect(defaults.roleAgentTimeoutMs).toBe(240000);
     expect(defaults.assetAnalysisConcurrency).toBe(3);
 
     process.env.VIDEO_AGENT_MODEL_FIRST_EVENT_TIMEOUT_MS = '123';
