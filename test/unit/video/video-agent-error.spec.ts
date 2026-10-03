@@ -349,6 +349,67 @@ describe('video agent stream errors', () => {
     }
   });
 
+  it('treats a timeout after a retry-safe write as retryable instead of status unknown', async () => {
+    jest.useFakeTimers();
+    const previousTotalTimeout = process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS;
+    process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = '5';
+
+    try {
+      const executionService = new VideoAgentExecutionService(
+        new ConfigService(),
+      );
+      const mutationState = { sideEffectStarted: false };
+      const sessionRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        update: jest.fn(() => new Promise(() => undefined)),
+      };
+      const tools = new (VideoToolsService as any)(
+        { find: jest.fn().mockResolvedValue([]) },
+        { findOne: jest.fn().mockResolvedValue(null) },
+        sessionRepo,
+        {},
+        {},
+        {},
+        {},
+        {},
+        executionService,
+      ).buildTools({
+        sessionId: 'session-1',
+        userId: 7,
+        mutationState,
+      } as any);
+
+      const pending = executionService.runTotalAgent(
+        { sessionId: 'session-1', mutationState },
+        (signal) =>
+          tools.update_creative_brief.execute(
+            { duration: 30 },
+            { abortSignal: signal },
+          ),
+      );
+      const result = pending.catch((reason) => reason);
+      for (let index = 0; index < 10; index += 1) {
+        await Promise.resolve();
+      }
+      expect(mutationState.sideEffectStarted).toBe(false);
+      await jest.advanceTimersByTimeAsync(5);
+      const error = await result;
+
+      expect(toVideoAgentError(error)).toEqual({
+        code: 'AGENT_TOTAL_TIMEOUT',
+        retryable: true,
+        message: '创作请求超时，请重试',
+      });
+    } finally {
+      if (previousTotalTimeout === undefined) {
+        delete process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS;
+      } else {
+        process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = previousTotalTimeout;
+      }
+      jest.useRealTimers();
+    }
+  });
+
   it('uses the script-save deadline for generate_script', async () => {
     const timeout = new VideoAgentTimeoutError(
       'TOOL_TIMEOUT',

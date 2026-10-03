@@ -352,11 +352,15 @@ export class VideoToolsService {
       ) => {
         try {
           const fullPath = this.resolveSkillPath(relativePath);
-          await this.runAbortAware(executionContext, () =>
-            fs.mkdir(path.dirname(fullPath), { recursive: true }),
+          await this.runAbortAware(
+            executionContext,
+            () => fs.mkdir(path.dirname(fullPath), { recursive: true }),
+            { trackSideEffect: false },
           );
-          await this.runAbortAware(executionContext, () =>
-            fs.writeFile(fullPath, content, 'utf-8'),
+          await this.runAbortAware(
+            executionContext,
+            () => fs.writeFile(fullPath, content, 'utf-8'),
+            { trackSideEffect: false },
           );
           return {
             path: relativePath,
@@ -404,11 +408,14 @@ export class VideoToolsService {
           Object.entries(profile).filter(([, v]) => v !== undefined),
         );
         const merged = { ...(session?.creativeBrief || {}), ...incoming };
-        await this.runAbortAware(executionContext, () =>
-          this.sessionRepo.update(
-            { sessionId: ctx.sessionId },
-            { creativeBrief: merged },
-          ),
+        await this.runAbortAware(
+          executionContext,
+          () =>
+            this.sessionRepo.update(
+              { sessionId: ctx.sessionId },
+              { creativeBrief: merged },
+            ),
+          { trackSideEffect: false },
         );
         return { success: true, profile: merged };
       },
@@ -1197,12 +1204,21 @@ export class VideoToolsService {
     }
   }
 
+  /**
+   * 执行写操作，并在请求可能被中断时决定是否记录「副作用已开始」。
+   *
+   * `trackSideEffect` 默认开启，用于会产出用户可见结果、重放会产生重复数据的写操作
+   * （generate_script / create_video_task）：超时后客户端必须刷新核对，不能直接重试。
+   * 对可安全重放的写操作（update_creative_brief / write_file）传 false，
+   * 让超时退化为可重试的错误，而不是把用户挡在「操作状态未知」的死路上。
+   */
   private async runAbortAware<T>(
     executionContext: ToolExecutionContext,
     mutation: () => Promise<T>,
+    options: { trackSideEffect?: boolean } = {},
   ): Promise<T> {
     this.throwIfAborted(executionContext.abortSignal);
-    if (executionContext.mutationState) {
+    if ((options.trackSideEffect ?? true) && executionContext.mutationState) {
       executionContext.mutationState.sideEffectStarted = true;
     }
     const result = await mutation();
