@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { VideoService } from './video.service';
 import { VideoTaskService } from './video-task.service';
+import { VideoGenerationPlanService } from './video-generation-plan.service';
 import { VideoController } from './video.controller';
 import { ToolModule } from '../tool/tool.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VideoSession } from './entities/video-session.entity';
 import { VideoTask } from './entities/video-task.entity';
+import { VideoGenerationPlan } from './entities/video-generation-plan.entity';
 import { VideoMessage } from './entities/video-message.entity';
 import { VideoAsset } from './entities/video-asset.entity';
 import { VideoScript } from './entities/video-script.entity';
@@ -27,6 +29,7 @@ import { OssModule } from '../oss/oss.module';
   providers: [
     VideoService,
     VideoTaskService,
+    VideoGenerationPlanService,
     VideoLLMService,
     SkillLoaderService,
     AgentRoleRegistryService,
@@ -44,6 +47,7 @@ import { OssModule } from '../oss/oss.module';
     TypeOrmModule.forFeature([
       VideoSession,
       VideoTask,
+      VideoGenerationPlan,
       VideoMessage,
       VideoAsset,
       VideoScript,

@@ -2,7 +2,9 @@ jest.mock('ioredis', () => {
   class RedisMock {
     options = {};
     publish = jest.fn().mockResolvedValue(1);
-    subscribe = jest.fn().mockImplementation((_channel, callback) => callback(null));
+    subscribe = jest
+      .fn()
+      .mockImplementation((_channel, callback) => callback(null));
     on = jest.fn();
   }
 
@@ -41,11 +43,14 @@ describe('VideoTaskService callbacks', () => {
     taskQueue = { add: jest.fn().mockResolvedValue({}) };
 
     const config = {
-      get: jest.fn((key: string) => ({
-        VIDEO_CALLBACK_TOKEN: 'test-callback-token',
-        REDIS_HOST: 'localhost',
-        REDIS_PORT: '6379',
-      })[key]),
+      get: jest.fn(
+        (key: string) =>
+          ({
+            VIDEO_CALLBACK_TOKEN: 'test-callback-token',
+            REDIS_HOST: 'localhost',
+            REDIS_PORT: '6379',
+          })[key],
+      ),
     };
 
     service = new VideoTaskService(
@@ -54,6 +59,7 @@ describe('VideoTaskService callbacks', () => {
       {} as any,
       sessionRepo as any,
       messageRepo as any,
+      {} as any,
       taskQueue as any,
       config as any,
     );
@@ -89,7 +95,9 @@ describe('VideoTaskService callbacks', () => {
       content: { video_url: 'https://example.test/video.mp4' },
     });
 
-    await expect(service.handleCallback({ id: 'task-1', status: 'running' })).resolves.toEqual({
+    await expect(
+      service.handleCallback({ id: 'task-1', status: 'running' }),
+    ).resolves.toEqual({
       received: true,
       applied: false,
     });
@@ -103,7 +111,9 @@ describe('VideoTaskService callbacks', () => {
     task.status = 'running';
     task.volcResponse = JSON.stringify({ id: 'task-1', status: 'running' });
 
-    await expect(service.handleCallback({ id: 'task-1', status: 'queued' })).resolves.toEqual({
+    await expect(
+      service.handleCallback({ id: 'task-1', status: 'queued' }),
+    ).resolves.toEqual({
       received: true,
       applied: false,
     });
@@ -113,11 +123,13 @@ describe('VideoTaskService callbacks', () => {
   });
 
   it('queues OSS persistence when the model reports success', async () => {
-    await expect(service.handleCallback({
-      id: 'task-1',
-      status: 'succeeded',
-      content: { video_url: 'https://example.test/video.mp4' },
-    })).resolves.toEqual({
+    await expect(
+      service.handleCallback({
+        id: 'task-1',
+        status: 'succeeded',
+        content: { video_url: 'https://example.test/video.mp4' },
+      }),
+    ).resolves.toEqual({
       received: true,
       applied: true,
     });
@@ -144,7 +156,11 @@ describe('VideoTaskService callbacks', () => {
   });
 
   it('does not write a duplicate result message for an already processed callback', async () => {
-    const callback = { id: 'task-1', status: 'failed', error: { message: '内容不合规' } };
+    const callback = {
+      id: 'task-1',
+      status: 'failed',
+      error: { message: '内容不合规' },
+    };
 
     await service.handleCallback(callback);
     await service.handleCallback(callback);
@@ -157,7 +173,11 @@ describe('VideoTaskService callbacks', () => {
       taskId: 'task-1',
       eventType: 'video_generation_submitted',
       content: '视频生成任务已提交，正在处理中。',
-      metadata: { kind: 'video_generation_submitted', taskId: 'task-1', status: 'queued' },
+      metadata: {
+        kind: 'video_generation_submitted',
+        taskId: 'task-1',
+        status: 'queued',
+      },
     };
     messageRepo.findOne.mockResolvedValue(submittedMessage);
 
@@ -168,19 +188,27 @@ describe('VideoTaskService callbacks', () => {
     });
 
     expect(messageRepo.create).not.toHaveBeenCalled();
-    expect(messageRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-      taskId: 'task-1',
-      eventType: 'video_generation_submitted',
-      content: '视频生成未完成：内容不合规',
-      metadata: expect.objectContaining({ status: 'failed' }),
-    }));
+    expect(messageRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-1',
+        eventType: 'video_generation_submitted',
+        content: '视频生成未完成：内容不合规',
+        metadata: expect.objectContaining({ status: 'failed' }),
+      }),
+    );
   });
 });
 
 describe('VideoTaskService video generation', () => {
   let service: VideoTaskService;
   let scriptRepo: { findOne: jest.Mock };
-  let assetRepo: { findOne: jest.Mock; find: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let assetRepo: {
+    findOne: jest.Mock;
+    find: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+  };
+  let videoTaskRepo: { findOne: jest.Mock };
   let createdTaskParams: any;
 
   beforeEach(() => {
@@ -222,16 +250,22 @@ describe('VideoTaskService video generation', () => {
       save: jest.fn().mockResolvedValue({}),
     };
 
+    videoTaskRepo = { findOne: jest.fn().mockResolvedValue(null) };
+
     const config = {
-      get: jest.fn((key: string) => ({
-        REDIS_HOST: 'localhost',
-        REDIS_PORT: '6379',
-      })[key]),
+      get: jest.fn(
+        (key: string) =>
+          ({
+            REDIS_HOST: 'localhost',
+            REDIS_PORT: '6379',
+          })[key],
+      ),
     };
     service = new VideoTaskService(
-      {} as any,
+      videoTaskRepo as any,
       scriptRepo as any,
       assetRepo as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -242,38 +276,59 @@ describe('VideoTaskService video generation', () => {
       createdTaskParams = params;
       return { taskId: 'task-1' } as any;
     });
-    jest.spyOn(service as any, 'markVideoGenerationStarted').mockResolvedValue(undefined);
-    jest.spyOn(service as any, 'saveTaskEventMessage').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, 'markVideoGenerationStarted')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, 'saveTaskEventMessage')
+      .mockResolvedValue(undefined);
   });
 
   it('includes uploaded reference images when generating a full video edit', async () => {
     await service.createTaskByScriptId(10, {
       sessionId: 'session-1',
       userId: 1,
-      assets: [{
-        type: 'image',
-        url: 'https://example.test/reference.png',
-        name: 'reference.png',
-      }],
+      assets: [
+        {
+          type: 'image',
+          url: 'https://example.test/reference.png',
+          name: 'reference.png',
+        },
+      ],
     });
 
-    expect(createdTaskParams).toEqual(expect.objectContaining({
-      imageUrls: ['https://example.test/reference.png'],
-      videoUrls: ['https://example.test/source.mp4'],
-      duration: 12,
-      ratio: '16:9',
-    }));
+    expect(createdTaskParams).toEqual(
+      expect.objectContaining({
+        imageUrls: ['https://example.test/reference.png'],
+        videoUrls: ['https://example.test/source.mp4'],
+        duration: 12,
+        ratio: '16:9',
+      }),
+    );
   });
 
   it('puts the user-selected portrait first and does not duplicate it', async () => {
     scriptRepo.findOne.mockResolvedValueOnce({
-      id: 10, sessionId: 'session-1', userId: 1, seedancePrompt: 'Use portrait',
-      meta: { character: { mode: 'user_portrait', primaryAssetId: 30, selectionSource: 'user_explicit' } },
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Use portrait',
+      meta: {
+        character: {
+          mode: 'user_portrait',
+          primaryAssetId: 30,
+          selectionSource: 'user_explicit',
+        },
+      },
     });
     assetRepo.findOne.mockImplementation(({ where }) => {
       if ('url' in where) return Promise.resolve(null);
       return where.id === 30
-        ? Promise.resolve({ id: 30, assetType: 'image', url: 'https://example.test/portrait.png' })
+        ? Promise.resolve({
+            id: 30,
+            assetType: 'image',
+            url: 'https://example.test/portrait.png',
+          })
         : Promise.resolve(null);
     });
     assetRepo.find.mockResolvedValueOnce([
@@ -281,7 +336,10 @@ describe('VideoTaskService video generation', () => {
       { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
     ]);
 
-    await service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 });
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+    });
 
     expect(createdTaskParams.imageUrls).toEqual([
       'https://example.test/portrait.png',
@@ -291,7 +349,10 @@ describe('VideoTaskService video generation', () => {
 
   it('puts the selected preset avatar first', async () => {
     scriptRepo.findOne.mockResolvedValueOnce({
-      id: 10, sessionId: 'session-1', userId: 1, seedancePrompt: 'Use preset',
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Use preset',
       meta: {
         character: {
           mode: 'preset_avatar',
@@ -304,7 +365,10 @@ describe('VideoTaskService video generation', () => {
       { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
     ]);
 
-    await service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 });
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+    });
 
     expect(createdTaskParams.imageUrls).toEqual([
       'asset://asset-20260720212016-qfsgq',
@@ -314,16 +378,147 @@ describe('VideoTaskService video generation', () => {
 
   it('does not add a character image for scripts without a character', async () => {
     scriptRepo.findOne.mockResolvedValueOnce({
-      id: 10, sessionId: 'session-1', userId: 1, seedancePrompt: 'No character',
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'No character',
       meta: { character: { mode: 'none', selectionSource: 'auto_selected' } },
     });
     assetRepo.find.mockResolvedValueOnce([
       { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
     ]);
 
-    await service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 });
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+    });
 
-    expect(createdTaskParams.imageUrls).toEqual(['https://example.test/product.png']);
+    expect(createdTaskParams.imageUrls).toEqual([
+      'https://example.test/product.png',
+    ]);
+  });
+
+  it('续写脚本首段只参考原片，不掺入会话其它素材', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Continue the story',
+      meta: {
+        duration: 10,
+        ratio: '16:9',
+        continuation: {
+          mode: 'continuation',
+          sourceAssetId: 20,
+          sourceDurationSec: 12,
+          continuityMode: 'extend',
+        },
+      },
+    });
+    // 会话里还存在其它视频/图片素材，续写时必须全部忽略
+    assetRepo.find.mockResolvedValueOnce([
+      { id: 21, assetType: 'video', url: 'https://example.test/other.mp4' },
+      { id: 31, assetType: 'image', url: 'https://example.test/reference.png' },
+    ]);
+
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+    });
+
+    expect(createdTaskParams).toEqual(
+      expect.objectContaining({
+        imageUrls: undefined,
+        videoUrls: ['https://example.test/source.mp4'],
+        firstFrameUrl: undefined,
+        duration: 10,
+        ratio: '16:9',
+      }),
+    );
+  });
+
+  it('续写脚本首段选择尾帧作首帧时反查原片尾帧', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Continue the story',
+      meta: {
+        duration: 10,
+        continuation: {
+          mode: 'continuation',
+          sourceAssetId: 20,
+          sourceDurationSec: 12,
+          continuityMode: 'frame_bridge',
+        },
+      },
+    });
+    videoTaskRepo.findOne.mockResolvedValueOnce({
+      generatedVideoUrl: 'https://example.test/source.mp4',
+      lastFrameUrl: 'https://example.test/source-last-frame.png',
+      status: 'succeeded',
+    });
+    assetRepo.find.mockResolvedValueOnce([
+      { id: 21, assetType: 'video', url: 'https://example.test/other.mp4' },
+    ]);
+
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+    });
+
+    expect(createdTaskParams).toEqual(
+      expect.objectContaining({
+        imageUrls: undefined,
+        videoUrls: [],
+        firstFrameUrl: 'https://example.test/source-last-frame.png',
+        duration: 10,
+      }),
+    );
+  });
+
+  it('原片尾帧缺失时拒绝以尾帧作首帧续写', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Continue the story',
+      meta: {
+        duration: 10,
+        continuation: {
+          mode: 'continuation',
+          sourceAssetId: 20,
+          sourceDurationSec: 12,
+          continuityMode: 'frame_bridge',
+        },
+      },
+    });
+    videoTaskRepo.findOne.mockResolvedValueOnce(null);
+
+    await expect(
+      service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 }),
+    ).rejects.toThrow('原片尾帧不可用');
+  });
+
+  it('参考素材超出官方上限时直接中断并提示用户移除素材', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Too many assets',
+      meta: { character: { mode: 'none', selectionSource: 'auto_selected' } },
+    });
+    assetRepo.find.mockResolvedValueOnce(
+      Array.from({ length: 10 }, (_, index) => ({
+        id: 100 + index,
+        assetType: 'image',
+        url: `https://example.test/image-${index + 1}.png`,
+      })),
+    );
+
+    await expect(
+      service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 }),
+    ).rejects.toThrow('请先移除多余素材');
   });
 });
 
@@ -334,18 +529,22 @@ describe('VideoTaskService diagnostics', () => {
       save: jest.fn().mockImplementation(async (value) => value),
     };
     const config = {
-      get: jest.fn((key: string) => ({
-        YUNFEI_API_KEY: 'api-key',
-        YUNFEI_API_URL: 'https://provider.example.test/tasks',
-        YUNFEI_API_MODEL: 'configured-model',
-        APP_BASE_URL: 'https://app.example.test',
-        VIDEO_CALLBACK_TOKEN: 'callback-token',
-        REDIS_HOST: 'localhost',
-        REDIS_PORT: '6379',
-      })[key]),
+      get: jest.fn(
+        (key: string) =>
+          ({
+            YUNFEI_API_KEY: 'api-key',
+            YUNFEI_API_URL: 'https://provider.example.test/tasks',
+            YUNFEI_API_MODEL: 'configured-model',
+            APP_BASE_URL: 'https://app.example.test',
+            VIDEO_CALLBACK_TOKEN: 'callback-token',
+            REDIS_HOST: 'localhost',
+            REDIS_PORT: '6379',
+          })[key],
+      ),
     };
     const service = new VideoTaskService(
       taskRepo as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -408,8 +607,9 @@ describe('VideoTaskService diagnostics', () => {
     const service = createTaskService(taskRepo);
     const controller = new AbortController();
     let receivedSignal: AbortSignal | undefined;
-    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(
-      async (_url, init) => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(async (_url, init) => {
         receivedSignal = init?.signal as AbortSignal;
         controller.abort(new Error('request cancelled'));
         return {
@@ -420,8 +620,7 @@ describe('VideoTaskService diagnostics', () => {
             model: 'provider-model',
           }),
         } as Response;
-      },
-    );
+      });
 
     await expect(
       service.createTask({
@@ -442,55 +641,64 @@ describe('VideoTaskService diagnostics', () => {
     ['submission', '视频生成服务请求失败: HTTP 502'],
     ['cancellation', '视频生成服务取消失败: HTTP 502'],
     ['listing', '视频生成服务查询失败: HTTP 502'],
-  ])('does not expose provider response bodies when %s fails', async (operation, message) => {
-    const service = createTaskService({
-      create: jest.fn((value) => value),
-      save: jest.fn().mockResolvedValue({}),
-      findOne: jest.fn().mockResolvedValue({
-        taskId: 'task-1',
-        userId: 7,
-        status: 'queued',
-      }),
-    });
-    const sensitiveBody = 'https://provider.example.test/private?token=secret-prompt';
-    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
-      ok: false,
-      status: 502,
-      text: async () => sensitiveBody,
-    } as Response);
+  ])(
+    'does not expose provider response bodies when %s fails',
+    async (operation, message) => {
+      const service = createTaskService({
+        create: jest.fn((value) => value),
+        save: jest.fn().mockResolvedValue({}),
+        findOne: jest.fn().mockResolvedValue({
+          taskId: 'task-1',
+          userId: 7,
+          status: 'queued',
+        }),
+      });
+      const sensitiveBody =
+        'https://provider.example.test/private?token=secret-prompt';
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => sensitiveBody,
+      } as Response);
 
-    const operationPromise = operation === 'submission'
-      ? service.createTask({
-        sessionId: 'session-1',
-        userId: 7,
-        scriptId: 3,
-        prompt: sensitiveBody,
-      })
-      : operation === 'cancellation'
-        ? service.cancelOrDeleteTask('task-1', 7)
-        : service.listRemoteTasks();
+      const operationPromise =
+        operation === 'submission'
+          ? service.createTask({
+              sessionId: 'session-1',
+              userId: 7,
+              scriptId: 3,
+              prompt: sensitiveBody,
+            })
+          : operation === 'cancellation'
+            ? service.cancelOrDeleteTask('task-1', 7)
+            : service.listRemoteTasks();
 
-    await expect(operationPromise).rejects.toThrow(message);
-    await expect(operationPromise).rejects.not.toThrow('private');
-    await expect(operationPromise).rejects.not.toThrow('secret-prompt');
-    fetchSpy.mockRestore();
-  });
+      await expect(operationPromise).rejects.toThrow(message);
+      await expect(operationPromise).rejects.not.toThrow('private');
+      await expect(operationPromise).rejects.not.toThrow('secret-prompt');
+      fetchSpy.mockRestore();
+    },
+  );
 });
 
 function createTaskService(taskRepo: any): VideoTaskService {
   const config = {
-    get: jest.fn((key: string) => ({
-      YUNFEI_API_KEY: 'api-key',
-      YUNFEI_API_URL: 'https://provider.example.test/tasks',
-      YUNFEI_API_MODEL: 'configured-model',
-      APP_BASE_URL: 'https://app.example.test',
-      VIDEO_CALLBACK_TOKEN: 'callback-token',
-      REDIS_HOST: 'localhost',
-      REDIS_PORT: '6379',
-    })[key]),
+    get: jest.fn(
+      (key: string) =>
+        ({
+          YUNFEI_API_KEY: 'api-key',
+          YUNFEI_API_URL: 'https://provider.example.test/tasks',
+          YUNFEI_API_MODEL: 'configured-model',
+          APP_BASE_URL: 'https://app.example.test',
+          VIDEO_CALLBACK_TOKEN: 'callback-token',
+          REDIS_HOST: 'localhost',
+          REDIS_PORT: '6379',
+        })[key],
+    ),
   };
   return new VideoTaskService(
-    taskRepo as any,
+    taskRepo,
+    {} as any,
     {} as any,
     {} as any,
     {} as any,

@@ -55,6 +55,24 @@ export class VideoTask {
   @Column({ name: 'ratio', length: 32, nullable: true, comment: '宽高比' })
   ratio: string;
 
+  @Index()
+  @Column({ name: 'plan_id', nullable: true, comment: '关联分段生成计划ID，单段任务为空' })
+  planId: number;
+
+  @Column({ name: 'segment_index', nullable: true, comment: '所属分段序号（从1开始）' })
+  segmentIndex: number;
+
+  @Column({ name: 'prev_task_id', length: 128, nullable: true, comment: '上一段任务ID，用于续接' })
+  prevTaskId: string;
+
+  @Column({
+    name: 'continuity_mode',
+    length: 16,
+    nullable: true,
+    comment: '衔接方式: extend（延长上一段）/ frame_bridge（尾帧作首帧）',
+  })
+  continuityMode: string;
+
   @Column({ name: 'error_code', length: 128, nullable: true, comment: '错误码' })
   errorCode: string;
 

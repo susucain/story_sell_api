@@ -9,12 +9,15 @@ import {
   Req,
   Res,
   Param,
+  ParseIntPipe,
   Query,
   Sse,
   UnauthorizedException,
 } from '@nestjs/common';
 import { VideoService } from './video.service';
 import { VideoTaskService } from './video-task.service';
+import { VideoGenerationPlanService } from './video-generation-plan.service';
+import type { VideoContinuityMode } from './entities/video-generation-plan.entity';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import { UIMessage } from 'ai';
 import type { Request, Response } from 'express';
@@ -65,6 +68,7 @@ export class VideoController {
   constructor(
     private readonly videoService: VideoService,
     private readonly videoTaskService: VideoTaskService,
+    private readonly videoGenerationPlanService: VideoGenerationPlanService,
   ) {}
 
   @Post('chat')
@@ -75,6 +79,10 @@ export class VideoController {
       session_id?: string;
       referenced_script_id?: number;
       source_video_asset_id?: number;
+      /** 引用视频的意图，缺省按编辑原片处理；continue 表示基于原片续写新剧情 */
+      source_video_intent?: 'edit' | 'continue';
+      /** 仅续写时有意义：首段与原片的衔接方式 */
+      continuity_mode?: 'extend' | 'frame_bridge';
       retry?: boolean;
     },
     @CurrentUser() user: AuthenticatedUser,
@@ -124,6 +132,8 @@ export class VideoController {
       {
         referencedScriptId: body.referenced_script_id,
         sourceVideoAssetId: body.source_video_asset_id,
+        sourceVideoIntent: body.source_video_intent,
+        continuityMode: body.continuity_mode,
         userId: user.id,
         requestId:
           typeof res.locals.requestId === 'string'
@@ -226,6 +236,7 @@ export class VideoController {
       script_id: number;
       session_id?: string;
       user_prompt?: string;
+      mode?: 'single' | 'segmented';
       assets?: Array<{
         type: 'image' | 'video';
         url: string;
@@ -234,12 +245,66 @@ export class VideoController {
     },
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    if (body.mode === 'segmented') {
+      return this.videoGenerationPlanService.createPlan(body.script_id, {
+        sessionId: body.session_id,
+        userId: user.id,
+        userPrompt: body.user_prompt,
+        assets: body.assets,
+      });
+    }
+
     return this.videoTaskService.createTaskByScriptId(body.script_id, {
       sessionId: body.session_id,
       userId: user.id,
       userPrompt: body.user_prompt,
       assets: body.assets,
     });
+  }
+
+  // 必须声明在 generate/:taskId 之前，否则会被动态参数路由抢先匹配
+  @Get('generate/plan/:planId')
+  async getGenerationPlan(
+    @Param('planId', ParseIntPipe) planId: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.videoGenerationPlanService.getPlan(planId, user.id);
+  }
+
+  @Post('generate/plan/:planId/next')
+  async generateNextSegment(
+    @Param('planId', ParseIntPipe) planId: number,
+    @Body() body: { continuity_mode?: VideoContinuityMode },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.videoGenerationPlanService.startNextSegment(
+      planId,
+      body.continuity_mode ?? 'extend',
+      user.id,
+    );
+  }
+
+  @Post('generate/plan/:planId/segments/:segmentIndex/regenerate')
+  async regenerateSegment(
+    @Param('planId', ParseIntPipe) planId: number,
+    @Param('segmentIndex', ParseIntPipe) segmentIndex: number,
+    @Body() body: { continuity_mode?: VideoContinuityMode },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.videoGenerationPlanService.regenerateSegment(
+      planId,
+      segmentIndex,
+      body.continuity_mode ?? 'extend',
+      user.id,
+    );
+  }
+
+  @Post('generate/plan/:planId/cancel')
+  async cancelGenerationPlan(
+    @Param('planId', ParseIntPipe) planId: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.videoGenerationPlanService.cancelPlan(planId, user.id);
   }
 
   // 必须声明在 generate/:taskId 之前，否则会被动态参数路由抢先匹配

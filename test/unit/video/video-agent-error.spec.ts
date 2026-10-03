@@ -34,10 +34,7 @@ const mockedCreateUIMessageStream =
 describe('video agent stream errors', () => {
   it('passes a client disconnect signal to chat work but ignores a normally finished response close', async () => {
     const streamChat = jest.fn().mockResolvedValue(new ReadableStream());
-    const controller = new VideoController(
-      { streamChat } as any,
-      {} as any,
-    );
+    const controller = new VideoController({ streamChat } as any, {} as any);
     const request = new EventEmitter() as any;
     const response = Object.assign(new EventEmitter(), {
       locals: { requestId: 'request-1' },
@@ -51,7 +48,8 @@ describe('video agent stream errors', () => {
       response,
     );
 
-    const parentSignal = streamChat.mock.calls[0][2].parentSignal as AbortSignal;
+    const parentSignal = streamChat.mock.calls[0][2]
+      .parentSignal as AbortSignal;
     request.emit('aborted');
     expect(parentSignal.aborted).toBe(true);
 
@@ -84,10 +82,12 @@ describe('video agent stream errors', () => {
     await expect(
       (controller as any).chat(
         {
-          messages: [{
-            role: 'user',
-            secret: 'https://assets.example.test/private.png',
-          }],
+          messages: [
+            {
+              role: 'user',
+              secret: 'https://assets.example.test/private.png',
+            },
+          ],
         },
         { id: 7 },
         request,
@@ -97,10 +97,12 @@ describe('video agent stream errors', () => {
     await expect(
       (controller as any).chat(
         {
-          messages: [{
-            role: 'user',
-            secret: 'https://assets.example.test/private.png',
-          }],
+          messages: [
+            {
+              role: 'user',
+              secret: 'https://assets.example.test/private.png',
+            },
+          ],
         },
         { id: 7 },
         request,
@@ -186,7 +188,8 @@ describe('video agent stream errors', () => {
   it('serializes a total timeout after generate_script starts persistence as status unknown', async () => {
     jest.useFakeTimers();
     const previousTotalTimeout = process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS;
-    const previousScriptTimeout = process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS;
+    const previousScriptTimeout =
+      process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS;
     process.env.VIDEO_AGENT_TOTAL_TIMEOUT_MS = '5';
     process.env.VIDEO_AGENT_SCRIPT_SAVE_TIMEOUT_MS = '100';
 
@@ -201,7 +204,7 @@ describe('video agent stream errors', () => {
         save: jest.fn(() => new Promise(() => undefined)),
       };
       const tools = new (VideoToolsService as any)(
-        {},
+        { find: jest.fn().mockResolvedValue([]) },
         scriptRepo,
         { update: jest.fn() },
         {},
@@ -212,6 +215,7 @@ describe('video agent stream errors', () => {
             meta: {},
           })),
         },
+        {},
         {},
         {
           normalize: jest.fn((prompt) => ({ prompt, changes: [] })),
@@ -277,7 +281,7 @@ describe('video agent stream errors', () => {
         save: jest.fn(() => new Promise(() => undefined)),
       };
       const tools = new (VideoToolsService as any)(
-        {},
+        { find: jest.fn().mockResolvedValue([]) },
         scriptRepo,
         { update: jest.fn() },
         {},
@@ -288,6 +292,7 @@ describe('video agent stream errors', () => {
             meta: {},
           })),
         },
+        {},
         {},
         {
           normalize: jest.fn((prompt) => ({ prompt, changes: [] })),
@@ -364,7 +369,7 @@ describe('video agent stream errors', () => {
       })),
     };
     const service = new (VideoToolsService as any)(
-      {},
+      { find: jest.fn().mockResolvedValue([]) },
       scriptRepo,
       { update: jest.fn() },
       {},
@@ -375,6 +380,7 @@ describe('video agent stream errors', () => {
           meta: {},
         })),
       },
+      {},
       {},
       {
         normalize: jest.fn((prompt) => ({ prompt, changes: [] })),
@@ -387,7 +393,7 @@ describe('video agent stream errors', () => {
       sessionId: 'session-1',
       userId: 7,
       parentSignal: new AbortController().signal,
-    } as any) as any;
+    }) as any;
 
     await expect(
       tools.generate_script.execute({
@@ -424,7 +430,7 @@ describe('video agent stream errors', () => {
       status: 'queued',
     });
     const service = new (VideoToolsService as any)(
-      {},
+      { find: jest.fn().mockResolvedValue([]) },
       {
         findOne: jest.fn().mockResolvedValue({
           id: 3,
@@ -437,12 +443,13 @@ describe('video agent stream errors', () => {
       {},
       { createTaskByScriptId },
       {},
+      {},
       executionService,
     ) as VideoToolsService;
     const tools = service.buildTools({
       sessionId: 'session-1',
       userId: 7,
-    } as any) as any;
+    }) as any;
 
     await tools.create_video_task.execute(
       { script_id: 3 },
@@ -480,7 +487,7 @@ describe('video agent stream errors', () => {
     };
     const sessionRepo = { update: jest.fn() };
     const service = new (VideoToolsService as any)(
-      {},
+      { find: jest.fn().mockResolvedValue([]) },
       scriptRepo,
       sessionRepo,
       {},
@@ -491,6 +498,7 @@ describe('video agent stream errors', () => {
           meta: {},
         })),
       },
+      {},
       {},
       {
         normalize: jest.fn((prompt) => ({ prompt, changes: [] })),
@@ -503,13 +511,12 @@ describe('video agent stream errors', () => {
       sessionId: 'session-1',
       userId: 7,
       parentSignal: new AbortController().signal,
-    } as any) as any;
+    }) as any;
 
     await expect(
-      tools.generate_script.execute(
-        scriptInput(),
-        { abortSignal: new AbortController().signal },
-      ),
+      tools.generate_script.execute(scriptInput(), {
+        abortSignal: new AbortController().signal,
+      }),
     ).rejects.toBe(timeout);
 
     expect(scriptRepo.create).not.toHaveBeenCalled();
@@ -590,11 +597,13 @@ describe('video agent stream errors', () => {
       userId: 7,
       role: 'user',
       content: '分析附件',
-      parts: [{
-        type: 'file',
-        url: 'https://assets.example.test/retry-image.png',
-        mediaType: 'image/png',
-      }],
+      parts: [
+        {
+          type: 'file',
+          url: 'https://assets.example.test/retry-image.png',
+          mediaType: 'image/png',
+        },
+      ],
       createdAt: new Date(),
     };
     const retryAsset = {
@@ -640,11 +649,10 @@ describe('video agent stream errors', () => {
       },
     ) as VideoService;
 
-    await service.streamChat(
-      'session-1',
-      [uiUserMessage('retry-user-1')],
-      { userId: 7, retry: true },
-    );
+    await service.streamChat('session-1', [uiUserMessage('retry-user-1')], {
+      userId: 7,
+      retry: true,
+    });
 
     await expect(
       streamOptions.execute({ writer: { write: jest.fn() } }),
@@ -781,22 +789,23 @@ describe('video agent stream errors', () => {
       },
     ) as VideoService;
 
-    await service.streamChat(
-      'session-1',
-      [uiUserMessage('user-1')],
-      { userId: 7, parentSignal: parent.signal },
-    );
+    await service.streamChat('session-1', [uiUserMessage('user-1')], {
+      userId: 7,
+      parentSignal: parent.signal,
+    });
     const execution = streamOptions.execute({ writer: { write: jest.fn() } });
     await Promise.resolve();
     parent.abort(cancellation);
 
     await expect(execution).rejects.toBe(cancellation);
     await streamOptions.onEnd({
-      messages: [{
-        id: 'assistant-1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: '不应持久化' }],
-      }],
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          parts: [{ type: 'text', text: '不应持久化' }],
+        },
+      ],
       isAborted: true,
     });
 

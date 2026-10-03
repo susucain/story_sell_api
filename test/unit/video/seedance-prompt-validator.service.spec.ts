@@ -40,10 +40,12 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.errors).toContainEqual(expect.stringContaining('asset ID'));
   });
 
-  it('rejects ambiguous asset references followed by actions', () => {
+  it('warns on ambiguous asset references followed by actions', () => {
     const result = validator.validate('@图片1跑向画面右侧。');
 
-    expect(result.errors).toContainEqual(expect.stringContaining('紧接动作或方位'));
+    expect(result.warnings).toContainEqual(
+      expect.stringContaining('紧接动作或方位'),
+    );
   });
 
   it('rejects reference phrasing in a video edit request', () => {
@@ -52,22 +54,47 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.errors).toContainEqual(expect.stringContaining('编辑或延长任务'));
   });
 
-  it('rejects conflicting camera moves in one shot', () => {
+  it('warns on conflicting camera moves in one shot', () => {
     const result = validator.validate('镜头1：推镜头，主体微笑，随后拉镜头。');
 
-    expect(result.errors).toContainEqual(expect.stringContaining('一种运镜'));
+    expect(result.warnings).toContainEqual(expect.stringContaining('一种运镜'));
   });
 
-  it('rejects absolute times in multi-shot prompts', () => {
+  it('does not treat action words as conflicting camera moves', () => {
+    const result = validator.validate(
+      '镜头1：<主体1> 双手推开大门，随后身体左右摇摆。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('does not treat synonyms of the same camera move as conflicting', () => {
+    const result = validator.validate(
+      '镜头1：移镜头横向展开，等同平移。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('warns on absolute times in multi-shot prompts', () => {
     const result = validator.validate('镜头1：0-3秒，固定镜头。镜头2：3-6秒，跟拍主体。');
 
-    expect(result.errors).toContainEqual(expect.stringContaining('绝对秒数'));
+    expect(result.warnings).toContainEqual(expect.stringContaining('绝对秒数'));
   });
 
-  it('rejects timestamp ranges in multi-shot prompts', () => {
+  it('warns on timestamp ranges in multi-shot prompts', () => {
     const result = validator.validate('镜头1：0:00-0:03，固定镜头。镜头2：0:03-0:06，跟拍主体。');
 
-    expect(result.errors).toContainEqual(expect.stringContaining('绝对秒数'));
+    expect(result.warnings).toContainEqual(expect.stringContaining('绝对秒数'));
+  });
+
+  it('routes hard rules to errors and soft rules to warnings', () => {
+    const result = validator.validate(
+      '镜头1：推镜头后立即拉镜头，画面出现写有“限时特惠”的手牌。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
+    );
+
+    expect(result.warnings).toContainEqual(expect.stringContaining('一种运镜'));
+    expect(result.errors).toContainEqual(expect.stringContaining('画面文字'));
   });
 
   it('rejects a prompt without the no-text constraint', () => {
@@ -174,7 +201,7 @@ describe('SeedancePromptValidatorService', () => {
     expect(result.changes).toEqual([]);
   });
 
-  it('rejects asset references beyond the official count limits', () => {
+  it('rejects asset references that exceed the official count limits', () => {
     const tooManyImages = validator.validate(
       '参考 @图片1 与 @图片10 中的<主体1>，生成画面。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
     );
@@ -183,10 +210,10 @@ describe('SeedancePromptValidatorService', () => {
     );
 
     expect(tooManyImages.errors).toContainEqual(
-      expect.stringContaining('素材引用数量超出官方上限'),
+      expect.stringContaining('引用了不存在的素材编号'),
     );
     expect(tooManyVideos.errors).toContainEqual(
-      expect.stringContaining('素材引用数量超出官方上限'),
+      expect.stringContaining('引用了不存在的素材编号'),
     );
   });
 

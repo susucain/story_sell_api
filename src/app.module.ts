@@ -23,6 +23,7 @@ import { OssFile } from './oss/entities/oss.entity';
 import { VideoModule } from './video/video.module';
 import { VideoSession } from './video/entities/video-session.entity';
 import { VideoTask } from './video/entities/video-task.entity';
+import { VideoGenerationPlan } from './video/entities/video-generation-plan.entity';
 import { VideoMessage } from './video/entities/video-message.entity';
 import { VideoAsset } from './video/entities/video-asset.entity';
 import { VideoScript } from './video/entities/video-script.entity';
@@ -77,7 +78,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
         connectorPackage: 'mysql2',
-        entities: [User, AuthSession, Job, OssFile, VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript],
+        entities: [User, AuthSession, Job, OssFile, VideoSession, VideoTask, VideoGenerationPlan, VideoMessage, VideoAsset, VideoScript],
         synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true',
         migrations: [join(__dirname, 'database/migrations/*{.js,.ts}')],
         migrationsRun: configService.get<string>('RUN_MIGRATIONS') === 'true',

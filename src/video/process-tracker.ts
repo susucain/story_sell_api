@@ -1,5 +1,4 @@
 import {
-  buildProcessState,
   ProcessAction,
   ProcessCard,
   ProcessItem,
@@ -389,7 +388,12 @@ export class ProcessTracker {
         phase.endTime = this.now();
       }
       phase.items?.forEach((item) => {
-        if (item.status === 'running') item.status = 'completed';
+        if (item.status !== 'running') return;
+        if (item.id.startsWith('role-')) {
+          this.completeRoleItem(item);
+        } else {
+          item.status = 'completed';
+        }
       });
       phase.actions?.forEach((action) => {
         if (action.status === 'running') action.status = 'completed';
@@ -417,27 +421,30 @@ export class ProcessTracker {
     return GENERATION_TOOLS.has(toolName);
   }
 
-  /** 子 Agent 被分派：按角色追加一个过程阶段（已存在则置为进行中） */
+  /**
+   * 子 Agent 被分派：作为「修改并生成分镜脚本」阶段下的子项。
+   * 角色分工发生在这个阶段内部，因此收进阶段子项，避免与阶段平级造成
+   * 「阶段还在进行中、后面的步骤却已开始」的错位。
+   */
   markRoleDispatched(roleId: string, title: string) {
     if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
-    const phaseId = `dispatch-${roleId}`;
-    const existing = this.state.phases.find((phase) => phase.id === phaseId);
+    const phase = this.state.phases.find((item) => item.id === 'generate-script');
+    if (!phase) return;
+    const items = (phase.items ??= []);
+    const itemId = `role-${roleId}`;
+    const existing = items.find((item) => item.id === itemId);
     if (existing) {
       existing.status = 'running';
-      existing.startTime = existing.startTime ?? this.now();
+      existing.description = `${title}正在处理分派任务`;
+      existing.tag = undefined;
     } else {
-      const [phase] = buildProcessState(
-        [
-          {
-            id: phaseId,
-            title,
-            description: `${title}正在处理分派任务`,
-          },
-        ],
-        { startTime: this.now() },
-      ).phases;
-      this.state.phases.push(phase);
+      items.push({
+        id: itemId,
+        title,
+        description: `${title}正在处理分派任务`,
+        status: 'running',
+      });
     }
     this.emit();
   }
@@ -446,12 +453,19 @@ export class ProcessTracker {
   markRoleCompleted(roleId: string) {
     if (!this.started || this.finished) return;
     const phase = this.state.phases.find(
-      (item) => item.id === `dispatch-${roleId}`,
+      (item) => item.id === 'generate-script',
     );
-    if (!phase || phase.status === 'completed') return;
-    phase.status = 'completed';
-    phase.endTime = this.now();
+    const item = phase?.items?.find((entry) => entry.id === `role-${roleId}`);
+    if (!item || item.status === 'completed') return;
+    this.completeRoleItem(item);
     this.emit();
+  }
+
+  /** 角色子项完成：统一回写完成态描述与标签，避免停在「正在处理」文案 */
+  private completeRoleItem(item: ProcessItem) {
+    item.status = 'completed';
+    item.description = `${item.title}已完成分派任务`;
+    item.tag = { text: '已完成', type: 'success' };
   }
 
   private markPhaseDone(phaseId: ProcessPhase['id']) {

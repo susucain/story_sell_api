@@ -40,7 +40,16 @@ describe('buildProcessState', () => {
   });
 });
 
-describe('ProcessTracker role phases', () => {
+describe('ProcessTracker role items', () => {
+  const findRoleItem = (
+    phases: ProcessState['phases'],
+    roleId: string,
+    itemId: string,
+  ) =>
+    phases
+      .find((phase) => phase.id === roleId)
+      ?.items?.find((item) => item.id === itemId);
+
   it('keeps the fixed life-service phases when nothing is dispatched', () => {
     const { tracker, lastState } = createTracker();
 
@@ -52,43 +61,56 @@ describe('ProcessTracker role phases', () => {
     ]);
   });
 
-  it('appends a phase when a role sub-agent is dispatched', () => {
+  it('nests the role sub-agent under the script phase when dispatched', () => {
     const { tracker, lastState } = createTracker();
     tracker.start();
 
+    tracker.markRoleDispatched('screenwriter', '编剧');
+
+    const item = findRoleItem(
+      lastState().phases,
+      'generate-script',
+      'role-screenwriter',
+    );
+    expect(item?.title).toBe('编剧');
+    expect(item?.status).toBe('running');
+    expect(item?.description).toContain('正在处理分派任务');
+    // 角色分工不再作为顶层阶段出现，避免与阶段 2 平级错位
+    expect(lastState().phases.map((phase) => phase.id)).toEqual([
+      'load-guidelines',
+      'generate-script',
+    ]);
+  });
+
+  it('does not duplicate the role item when a role is dispatched twice', () => {
+    const { tracker, lastState } = createTracker();
+    tracker.start();
+
+    tracker.markRoleDispatched('screenwriter', '编剧');
     tracker.markRoleDispatched('screenwriter', '编剧');
 
     const phase = lastState().phases.find(
-      (item) => item.id === 'dispatch-screenwriter',
+      (entry) => entry.id === 'generate-script',
     );
-    expect(phase?.title).toBe('编剧');
-    expect(phase?.status).toBe('running');
+    expect(
+      phase?.items?.filter((item) => item.id === 'role-screenwriter'),
+    ).toHaveLength(1);
   });
 
-  it('does not duplicate the phase when a role is dispatched twice', () => {
-    const { tracker, lastState } = createTracker();
-    tracker.start();
-
-    tracker.markRoleDispatched('screenwriter', '编剧');
-    tracker.markRoleDispatched('screenwriter', '编剧');
-
-    const matches = lastState().phases.filter(
-      (item) => item.id === 'dispatch-screenwriter',
-    );
-    expect(matches).toHaveLength(1);
-  });
-
-  it('marks the role phase completed when the dispatch finishes', () => {
+  it('writes a completed description when the dispatch finishes', () => {
     const { tracker, lastState } = createTracker();
     tracker.start();
     tracker.markRoleDispatched('shot-planner', '导演');
 
     tracker.markRoleCompleted('shot-planner');
 
-    const phase = lastState().phases.find(
-      (item) => item.id === 'dispatch-shot-planner',
+    const item = findRoleItem(
+      lastState().phases,
+      'generate-script',
+      'role-shot-planner',
     );
-    expect(phase?.status).toBe('completed');
-    expect(phase?.endTime).toBeDefined();
+    expect(item?.status).toBe('completed');
+    expect(item?.description).toContain('已完成');
+    expect(item?.tag?.type).toBe('success');
   });
 });

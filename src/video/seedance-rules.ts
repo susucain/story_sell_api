@@ -91,6 +91,12 @@ export const MIN_VIDEO_DURATION_SEC = 4;
 /** 禁止类规则：判定逻辑在 service 中实现，文案与条款映射登记于此。 */
 export interface ProhibitionRule {
   id: string;
+  /**
+   * 命中级别：
+   * - error（硬性规则）：会阻断保存并要求模型重写 —— API 限制、任务类型误判、无文字画面 / 特殊字符等强制约束；
+   * - warning（软性规则）：仅打印告警，不阻断保存 —— 画面质量类建议，命中后由 normalize 或后续环节自行吸收。
+   */
+  severity: 'error' | 'warning';
   /** validate 命中时的报错文案 */
   message: string;
   /** normalize 阶段可自动修复时写入 changes 的披露文案 */
@@ -102,29 +108,34 @@ export interface ProhibitionRule {
 export const PROHIBITION_RULES = {
   rawAssetId: {
     id: 'rawAssetId',
+    severity: 'error',
     message:
       'Seedance 提示词不能直接使用 asset ID，请改用 @图片N、@视频N 或 @音频N 引用素材。',
     skillClause: 'Asset ID 屏蔽原则',
   },
   ambiguousAssetReference: {
     id: 'ambiguousAssetReference',
+    severity: 'warning',
     message:
       '素材引用后紧接动作或方位会产生歧义，请使用 <主体N>@图片N 或在引用后补充名词。',
     skillClause: '断句防歧义原则',
   },
   editReference: {
     id: 'editReference',
+    severity: 'error',
     message:
       '视频编辑或延长任务不能写“参考 @视频N”，请直接使用“严格编辑 @视频N”或“向前/向后延长 @视频N”。',
     skillClause: '任务类型优先 → 多模态参考再看复杂度',
   },
   conflictingCameraMove: {
     id: 'conflictingCameraMove',
+    severity: 'warning',
     message: '同一镜头只能指定一种运镜方式，请拆分或保留一个运镜。',
     skillClause: '一镜一运镜',
   },
   absoluteShotTime: {
     id: 'absoluteShotTime',
+    severity: 'warning',
     message:
       '多镜头 Seedance 提示词请使用镜头顺序，不要写绝对秒数或时间码。删除如“0-3秒”“0:00-0:03”的标记，仅保留“镜头1 / 镜头2 / 镜头3”。',
     normalizeChange: '已删除多镜头绝对时间码',
@@ -132,28 +143,34 @@ export const PROHIBITION_RULES = {
   },
   visualTextInstruction: {
     id: 'visualTextInstruction',
+    severity: 'error',
     message:
       'Seedance 提示词不能要求生成画面文字、字幕、标题、标语、手牌文字或按钮，所有文字请在后期添加。',
     skillClause: '无文字画面（最高优先级）',
   },
   unwrappedDialogue: {
     id: 'unwrappedDialogue',
+    severity: 'error',
     message: '台词必须使用 {…} 包裹（如 {你好，世界}），不要用引号直述。',
     skillClause: '特殊字符规范（强制使用）',
   },
   assetReferenceLimit: {
     id: 'assetReferenceLimit',
-    message: `素材引用数量超出官方上限（图片 ≤ ${ASSET_REF_LIMITS.image} 张、视频 ≤ ${ASSET_REF_LIMITS.video} 个、音频 ≤ ${ASSET_REF_LIMITS.audio} 个），请删减参考素材或修正引用的序号。`,
+    severity: 'error',
+    message:
+      'Seedance 提示词引用了不存在的素材编号（@图片N / @视频N / @音频N 超出当前可用素材范围），请改用实际存在的素材编号；若会话参考素材本身已超官方上限，请先请用户移除多余素材。',
     skillClause: '参数与素材规范',
   },
   audioOnlyInput: {
     id: 'audioOnlyInput',
+    severity: 'error',
     message:
       'Seedance 2.0 不支持「纯音频」与「文本 + 音频」输入，提示词必须至少引用一张参考图片或一段参考视频。',
     skillClause: '参数与素材规范',
   },
   shortDuration: {
     id: 'shortDuration',
+    severity: 'error',
     message: `脚本总时长不足官方最短生成时长 ${MIN_VIDEO_DURATION_SEC} 秒，请补足镜头内容后重新保存。`,
     skillClause: '参数与素材规范',
   },

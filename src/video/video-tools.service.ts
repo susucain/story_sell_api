@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { tool, zodSchema } from 'ai';
 import { z } from 'zod/v4';
 import * as fs from 'node:fs/promises';
@@ -9,8 +9,11 @@ import { VideoAsset } from './entities/video-asset.entity';
 import { VideoScript } from './entities/video-script.entity';
 import { VideoSession } from './entities/video-session.entity';
 import { VideoTask } from './entities/video-task.entity';
+import { VideoContinuityMode } from './entities/video-generation-plan.entity';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoTaskService, MAX_VIDEO_DURATION_SEC } from './video-task.service';
+import { VideoGenerationPlanService } from './video-generation-plan.service';
+import { resolveTargetDuration } from './video-segment-planner';
 import {
   getPresetAvatar,
   isLegacyAvatarAlias,
@@ -18,7 +21,11 @@ import {
   validateAvatarOutfitSelection,
 } from './avatar-catalog';
 import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
-import { MIN_VIDEO_DURATION_SEC, PROHIBITION_RULES } from './seedance-rules';
+import {
+  ASSET_REF_LIMITS,
+  MIN_VIDEO_DURATION_SEC,
+  PROHIBITION_RULES,
+} from './seedance-rules';
 import { RoleProfile } from './agent-role.registry';
 import {
   VideoAgentExecutionService,
@@ -49,6 +56,12 @@ interface ToolContext {
     sourceAssetId: number;
     sourceDurationSec: number;
   };
+  /** 基于已生成视频续写新剧情；与 fullVideoEdit 互斥 */
+  continuation?: {
+    sourceAssetId: number;
+    sourceDurationSec: number;
+    continuityMode: VideoContinuityMode;
+  };
 }
 
 interface ToolExecutionContext {
@@ -58,6 +71,8 @@ interface ToolExecutionContext {
 
 @Injectable()
 export class VideoToolsService {
+  private readonly logger = new Logger(VideoToolsService.name);
+
   /** skills 目录绝对路径，作为 read_file / write_file 的沙箱根 */
   private readonly skillsDir = process.env.SKILLS_DIR
     ? path.resolve(process.env.SKILLS_DIR)
@@ -74,9 +89,26 @@ export class VideoToolsService {
     private taskRepo: Repository<VideoTask>,
     private storyboardParser: StoryboardParserService,
     private taskService: VideoTaskService,
+    private planService: VideoGenerationPlanService,
     private seedancePromptValidator: SeedancePromptValidatorService,
     private readonly executionService: VideoAgentExecutionService,
   ) {}
+
+  /**
+   * 统计会话内可用作生成参考的素材数量。
+   * 用于判断「参考素材本身超出官方上限」这一用户侧问题（改写提示词无法解决）。
+   */
+  private async countReferenceAssets(
+    sessionId: string,
+  ): Promise<{ image: number; video: number }> {
+    const assets = await this.assetRepo.find({
+      where: { sessionId, assetPurpose: In(['reference', 'all']) },
+    });
+    return {
+      image: assets.filter((asset) => asset.assetType === 'image').length,
+      video: assets.filter((asset) => asset.assetType === 'video').length,
+    };
+  }
 
   buildTools(ctx: ToolContext, role?: RoleProfile) {
     const allTools = {
@@ -122,7 +154,10 @@ export class VideoToolsService {
           toolName,
           {
             ...definition,
-            execute: async (input: unknown, sdkContext: ToolExecutionContext) => {
+            execute: async (
+              input: unknown,
+              sdkContext: ToolExecutionContext,
+            ) => {
               const mutationState = context.mutationState ?? {
                 sideEffectStarted: false,
               };
@@ -361,10 +396,7 @@ export class VideoToolsService {
           constraints: z.array(z.string()).optional().describe('额外约束'),
         }),
       ),
-      execute: async (
-        profile,
-        executionContext: ToolExecutionContext = {},
-      ) => {
+      execute: async (profile, executionContext: ToolExecutionContext = {}) => {
         const session = await this.sessionRepo.findOne({
           where: { sessionId: ctx.sessionId },
         });
@@ -372,13 +404,11 @@ export class VideoToolsService {
           Object.entries(profile).filter(([, v]) => v !== undefined),
         );
         const merged = { ...(session?.creativeBrief || {}), ...incoming };
-        await this.runAbortAware(
-          executionContext,
-          () =>
-            this.sessionRepo.update(
-              { sessionId: ctx.sessionId },
-              { creativeBrief: merged },
-            ),
+        await this.runAbortAware(executionContext, () =>
+          this.sessionRepo.update(
+            { sessionId: ctx.sessionId },
+            { creativeBrief: merged },
+          ),
         );
         return { success: true, profile: merged };
       },
@@ -395,6 +425,15 @@ export class VideoToolsService {
       preserveAudio: z.boolean(),
     });
     const editField = ctx.fullVideoEdit ? editSchema : editSchema.nullish();
+    const continuationSchema = z.object({
+      mode: z.literal('continuation'),
+      sourceAssetId: z.number().int().positive(),
+      sourceDurationSec: z.number().positive(),
+      continuityMode: z.enum(['extend', 'frame_bridge']),
+    });
+    const continuationField = ctx.continuation
+      ? continuationSchema
+      : continuationSchema.nullish();
     // 时长/画幅允许模型漏填，漏填时静默使用解析值或默认值，不触发工具重试
     const durationField = z.number().int().positive().nullish();
     const ratioField = z.enum(['9:16', '16:9', '1:1']).nullish();
@@ -402,7 +441,9 @@ export class VideoToolsService {
     return tool({
       description: ctx.fullVideoEdit
         ? '当前请求已锁定为引用视频的完整视频编辑任务。meta.edit 为必填项，必须使用当前原视频素材和完整时长；用户未给出修改时间范围时应先追问，禁止保存普通分镜脚本。storyboard_markdown 必须包含可解析的任务镜头，格式为“### 镜头 1：视频局部编辑 (开始s - 结束s)”，并包含“画面描述”和“旁白”字段。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。'
-        : '保存最终的分镜脚本，或保存基于已有视频的完整视频编辑任务。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。脚本重写时保存完整新脚本；完整视频编辑时 storyboard_markdown 仅包含可解析的视频编辑任务，seedance_prompt 必须要求输出原视频完整时长且仅修改目标时间段，meta.edit 必须提供原视频素材和时间范围。多镜头 seedance_prompt 只能按“镜头1 / 镜头2 / 镜头3”顺序描述，禁止复制 storyboard_markdown 中的秒数或时间码。不得只在对话中输出提示词。工具会接收 storyboard_markdown、seedance_prompt 和 meta，自动解析为结构化数据并写入数据库。seedance_prompt 中禁止出现 asset ID、素材编号或“参考图1”，人像统一写 <主体1>@图片1；meta.character 必须包含 mode 和 selectionSource。',
+        : ctx.continuation
+          ? '当前请求已锁定为「基于已生成视频续写新剧情」。这是新的一条视频，不是编辑原片：必须填写 meta.continuation（sourceAssetId、sourceDurationSec、continuityMode），禁止填写 meta.edit。storyboard_markdown 必须是从“### 镜头 1”重新开始的新分镜，内容紧接原片结尾继续推进，不得复述原片已有镜头；总时长按用户要求的续写篇幅决定，可以超过单次生成上限。必须继承前序脚本的 ratio/style/platform 与 meta.character（selectionSource=inherited）。seedance_prompt 首句写“向后延长 @视频1”。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。'
+          : '保存最终的分镜脚本，或保存基于已有视频的完整视频编辑任务。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。脚本重写时保存完整新脚本；完整视频编辑时 storyboard_markdown 仅包含可解析的视频编辑任务，seedance_prompt 必须要求输出原视频完整时长且仅修改目标时间段，meta.edit 必须提供原视频素材和时间范围。多镜头 seedance_prompt 只能按“镜头1 / 镜头2 / 镜头3”顺序描述，禁止复制 storyboard_markdown 中的秒数或时间码。不得只在对话中输出提示词。工具会接收 storyboard_markdown、seedance_prompt 和 meta，自动解析为结构化数据并写入数据库。seedance_prompt 中禁止出现 asset ID、素材编号或“参考图1”，人像统一写 <主体1>@图片1；meta.character 必须包含 mode 和 selectionSource。',
       inputSchema: zodSchema(
         z.object({
           title: z.string(),
@@ -410,13 +451,16 @@ export class VideoToolsService {
           seedance_prompt: z.string(),
           meta: z.object({
             duration: durationField.describe(
-              `视频总时长（秒，上限 ${MAX_VIDEO_DURATION_SEC} 秒），建议与 storyboard_markdown 的总时长一致；留空时按脚本解析结果或默认 ${MAX_VIDEO_DURATION_SEC} 秒处理`,
+              `视频总时长（秒），可与 storyboard_markdown 的总时长一致；留空时按脚本解析结果或默认 ${MAX_VIDEO_DURATION_SEC} 秒处理。总时长可超过单次生成上限 ${MAX_VIDEO_DURATION_SEC} 秒，超长脚本由系统按镜头与台词边界自动分段逐段生成；但单个镜头的时长不得超过 ${MAX_VIDEO_DURATION_SEC} 秒`,
             ),
             ratio: ratioField.describe(
               '画幅比例，抖音/小红书竖屏使用 9:16；留空时按脚本解析结果或默认 9:16 处理',
             ),
             style: z.string().nullish().describe('视觉风格关键词'),
-            platform: z.string().nullish().describe('投放平台，如 抖音 / 小红书'),
+            platform: z
+              .string()
+              .nullish()
+              .describe('投放平台，如 抖音 / 小红书'),
             description: z.string().optional(),
             hashtags: z.array(z.string()).optional(),
             character: z.object({
@@ -438,15 +482,14 @@ export class VideoToolsService {
                 .default('auto_selected'),
             }),
             edit: editField,
+            continuation: continuationField,
           }),
         }),
       ),
-      execute: async ({
-        title,
-        storyboard_markdown,
-        seedance_prompt,
-        meta,
-      }, executionContext: ToolExecutionContext = {}) => {
+      execute: async (
+        { title, storyboard_markdown, seedance_prompt, meta },
+        executionContext: ToolExecutionContext = {},
+      ) => {
         // 编排模式下要求先分派角色子 Agent，避免导演跳过流水线自行代写
         if (ctx.requireDispatch && (ctx.dispatchedRoles?.length ?? 0) === 0) {
           return {
@@ -489,6 +532,57 @@ export class VideoToolsService {
             };
           }
         }
+        if (ctx.continuation) {
+          if (!meta.continuation || meta.continuation.mode !== 'continuation') {
+            return {
+              success: false,
+              message:
+                '当前请求是基于原视频续写，必须填写 meta.continuation 且不得填写 meta.edit',
+            };
+          }
+          if (
+            meta.continuation.sourceAssetId !==
+              ctx.continuation.sourceAssetId ||
+            meta.continuation.sourceDurationSec !==
+              ctx.continuation.sourceDurationSec ||
+            meta.continuation.continuityMode !== ctx.continuation.continuityMode
+          ) {
+            return {
+              success: false,
+              message: '续写任务必须使用当前引用的原视频与用户指定的衔接方式',
+            };
+          }
+          if (meta.edit) {
+            return {
+              success: false,
+              message:
+                '续写任务是新的一条视频，不得创建视频编辑任务（meta.edit）',
+            };
+          }
+        } else if (meta.continuation) {
+          return {
+            success: false,
+            message: '只有基于原视频续写时才能创建 meta.continuation',
+          };
+        }
+
+        // 参考素材「本身」超上限属于用户侧问题：改写提示词无法解决，直接中断并请用户移除素材
+        // （续写模式只送原片、编辑模式不送会话视频，故按模式区分需要真正校验的素材类别）
+        if (!ctx.continuation) {
+          const referenceCounts = await this.countReferenceAssets(
+            ctx.sessionId,
+          );
+          const imageOverflow = referenceCounts.image > ASSET_REF_LIMITS.image;
+          const videoOverflow =
+            !ctx.fullVideoEdit &&
+            referenceCounts.video > ASSET_REF_LIMITS.video;
+          if (imageOverflow || videoOverflow) {
+            return {
+              success: false,
+              message: `当前会话可用于生成的参考素材已超出官方上限（图片 ${referenceCounts.image}/${ASSET_REF_LIMITS.image} 张、视频 ${referenceCounts.video}/${ASSET_REF_LIMITS.video} 个）。这是素材数量问题，改写提示词无法解决：请立即停止改写与重试，直接、原样告知用户「请先移除多余素材后再重新生成」，并等待用户处理。`,
+            };
+          }
+        }
 
         // 主角色人像会作为第 1 张参考图传给模型，模型误写素材 ID 时自动替换为 @图片1
         const presetAvatarId = meta.character.presetAvatarId;
@@ -511,6 +605,12 @@ export class VideoToolsService {
             message: `Seedance 提示词未通过校验：${validation.errors.join('；')}`,
             warnings: validation.warnings,
           };
+        }
+        // 软性规则（一镜一运镜、绝对时间码、断句歧义等）命中时只告警，不要求模型重写
+        if (validation.warnings.length > 0) {
+          this.logger.warn(
+            `Seedance 提示词软性告警（仅提示，不阻断保存）sessionId=${ctx.sessionId}：${validation.warnings.join('；')}`,
+          );
         }
 
         if (meta.character.mode === 'user_portrait') {
@@ -647,7 +747,7 @@ export class VideoToolsService {
           }),
         );
         const effectiveDuration = Math.max(declaredDuration, lastShotEndSec);
-        // 引用视频修改沿用原视频时长，官方时长下限只约束新建脚本
+        // 引用视频修改沿用原视频时长；新建脚本允许超过单次生成上限（由分段生成承接）
         if (
           !meta.edit &&
           effectiveDuration > 0 &&
@@ -658,12 +758,10 @@ export class VideoToolsService {
             message: PROHIBITION_RULES.shortDuration.message,
           };
         }
-        if (effectiveDuration > MAX_VIDEO_DURATION_SEC) {
+        if (meta.edit && effectiveDuration > MAX_VIDEO_DURATION_SEC) {
           return {
             success: false,
-            message: meta.edit
-              ? `原视频时长 ${effectiveDuration} 秒超过模型单次生成上限 ${MAX_VIDEO_DURATION_SEC} 秒，无法生成完整视频编辑任务。`
-              : `脚本总时长 ${effectiveDuration} 秒超过模型单次生成上限 ${MAX_VIDEO_DURATION_SEC} 秒，请压缩镜头，使最后一个镜头结束时间不超过 ${MAX_VIDEO_DURATION_SEC} 秒后重新保存。`,
+            message: `原视频时长 ${effectiveDuration} 秒超过模型单次生成上限 ${MAX_VIDEO_DURATION_SEC} 秒，无法生成完整视频编辑任务。`,
           };
         }
 
@@ -699,17 +797,14 @@ export class VideoToolsService {
           status: 'draft',
         });
 
-        const saved = await this.runAbortAware(
-          executionContext,
-          () => this.scriptRepo.save(script),
+        const saved = await this.runAbortAware(executionContext, () =>
+          this.scriptRepo.save(script),
         );
-        await this.runAbortAware(
-          executionContext,
-          () =>
-            this.sessionRepo.update(
-              { sessionId: ctx.sessionId },
-              { status: 'script_generated' },
-            ),
+        await this.runAbortAware(executionContext, () =>
+          this.sessionRepo.update(
+            { sessionId: ctx.sessionId },
+            { status: 'script_generated' },
+          ),
         );
 
         return {
@@ -754,14 +849,37 @@ export class VideoToolsService {
           return { success: false, message: '脚本不存在或无权访问' };
         }
 
-        const task = await this.runAbortAware(
-          executionContext,
-          () =>
-            this.taskService.createTaskByScriptId(script.id, {
+        // 超过单次生成上限的脚本走分段生成：先出第 1 段，后续由用户逐段确认
+        const targetDuration = resolveTargetDuration(
+          script.shots ?? [],
+          script.meta?.duration,
+        );
+        if (targetDuration > MAX_VIDEO_DURATION_SEC) {
+          const plan = await this.runAbortAware(executionContext, () =>
+            this.planService.createPlan(script.id, {
               sessionId: ctx.sessionId,
               userId: ctx.userId,
               signal: executionContext.abortSignal,
             }),
+          );
+
+          return {
+            success: true,
+            script_id: script.id,
+            mode: 'segmented',
+            plan_id: plan.planId,
+            total_segments: plan.totalSegments,
+            status: plan.status,
+            message: `脚本总时长 ${targetDuration} 秒超过单次生成上限 ${MAX_VIDEO_DURATION_SEC} 秒，已拆成 ${plan.totalSegments} 段提交，第 1 段正在排队处理；每段生成完成后需用户确认再生成下一段。`,
+          };
+        }
+
+        const task = await this.runAbortAware(executionContext, () =>
+          this.taskService.createTaskByScriptId(script.id, {
+            sessionId: ctx.sessionId,
+            userId: ctx.userId,
+            signal: executionContext.abortSignal,
+          }),
         );
 
         return {
