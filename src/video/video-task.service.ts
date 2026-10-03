@@ -273,7 +273,6 @@ export class VideoTaskService {
         ratio,
         imageCount: params.imageUrls?.length ?? 0,
         videoCount: params.videoUrls?.length ?? 0,
-        requestBody,
       }),
     );
 
