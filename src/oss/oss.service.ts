@@ -45,6 +45,9 @@ export class OssService {
       accessKeyId: configService.get<string>('OSS_ACCESS_KEY_ID'),
       accessKeySecret: configService.get<string>('OSS_ACCESS_KEY_SECRET'),
       bucket: configService.get<string>('OSS_BUCKET_NAME'),
+      // ali-oss 在 Node 端默认 secure=false，会签发 http:// 地址；
+      // 前端运行在 https 站点上，http 资源会被浏览器判为混合内容而拦截。
+      secure: true,
     });
     this.transferMaxBytes = Number(
       configService.get<string>('OSS_TRANSFER_MAX_BYTES') ||
