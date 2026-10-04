@@ -47,7 +47,7 @@
 | [video.service.ts](../../../src/video/video.service.ts#L554-L562) | 仅成功路径落库助手消息 |
 | [video.service.ts](../../../src/video/video.service.ts#L1098-L1153) | `saveAssistantUIMessage` 只写 `content` + `toolCalls`（工具名 + 500 字摘要）+ `metadata.scriptId`，**不写 `parts`** |
 | [video.service.ts](../../../src/video/video.service.ts#L737-L748) | 历史接口因 `parts` 为空，助手消息只还原成一个 text part |
-| [video.service.ts](../../../src/video/video.service.ts#L1161-L1180) | 已实现「中止兜底」：本轮已生成脚本但整体被中断时，补写一条助手消息 |
+| [video.service.ts](../../../src/video/video.service.ts#L510-L520) | `onEnd` 只在 `completed === true` 时落库助手消息；中断路径不再补写（原「中止兜底」已删除，最终态改由 run 账本判定） |
 | [index.tsx](../../../agui-frontend/src/pages/VideoStoryboard/index.tsx#L474-L477) | `handleStop` 调用 `stop()` + 移除未完成的助手轮次 |
 | [index.tsx](../../../agui-frontend/src/pages/VideoStoryboard/index.tsx#L195-L202) | 面板取**最后一条** `data-process-state` part 渲染 |
 | [video-generation-plan](../../../src/video/video-generation-plan.service.ts) | 分段视频已实现 planId 落库 + 前端刷新后恢复面板 + Redis 推送，是本方案的**既有先例** |
@@ -128,7 +128,7 @@ type RunEventType =
 | M2 事件总线与重放 | 追加事件、按 seq 重放、尾随推送 | Redis Stream + MAXLEN + TTL；seq 空洞触发快照重建 |
 | M3 后台执行器 | 脱离请求信号执行流水线 | 复用现有 `runTotalAgent`，仅解除信号绑定 |
 | M4 幂等与副作用台账 | 工具恰好一次 + 阶段级续跑 | `tool_invocations(run_id, step_index, tool, args_hash)` 唯一；`generate_script` 幂等键 = `(session_id, user_msg_id, revision)` |
-| M5 心跳与崩溃回收 | 发现孤儿 run 并对账 | `heartbeat_at` + sweeper；Phase 0 的「中止兜底」是其极简版 |
+| M5 心跳与崩溃回收 | 发现孤儿 run 并对账 | `heartbeat_at` + sweeper；Phase 0 的「中止兜底」已删除，Phase 1 起由 run 账本判定最终态取代 |
 | M6 前端 Run 恢复 | 面板 + 正文恢复、断线重连 | 复用 planId 恢复模式 |
 | M7 会话级并发与配额 | 同会话串行、跨会话并行 | 同 session 至多 1 个 running run |
 | M8 可观测性 | runId 全链路贯穿 | Langfuse trace + 指标 |
@@ -151,10 +151,10 @@ type RunEventType =
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
 | 超时预算对齐 | ✅ 已完成 | `.env` 六项预算与 `env.prod.example` 对齐，总预算 300s → 900s，新增 `ROLE_TIMEOUT` |
-| 中止兜底 | ✅ 已完成 | 本轮已生成脚本但被中断时补写助手消息，消除 S6 的自相矛盾 |
+| 中止兜底 | ⚠️ 已废弃 | Phase 0 曾补写助手消息止血；Phase 1/2 落地后由 run 账本 + 事件重放取代，该补写路径已删除 |
 | SSE 响应头 | ✅ 无需改动 | 审计发现 `x-accel-buffering: no` / `cache-control` / `connection` 由 SDK 内置 |
 | 静默期心跳 | ⏸ 暂不需要 | 生产 nginx 直连 ECS 且 `proxy_read_timeout=930s` > 最长静默 180s；若未来引入 LB 再加 |
-| 切会话语义明确 | ✅ 已完成 | 切换会话时中止在途请求并提示，消除"孤儿任务 + 输入锁死"（Phase 1 替换为 detach + 恢复） |
+| 切会话语义明确 | ✅ 已完成 | 切换会话时中止在途请求并提示，消除"孤儿任务 + 输入锁死"（Phase 1 已替换为 detach + 恢复） |
 
 ### Phase 1 · Run 一等公民（流协议不变）
 
