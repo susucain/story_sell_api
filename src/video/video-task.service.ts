@@ -974,6 +974,8 @@ export class VideoTaskService {
         kind: eventType,
         taskId: task.taskId,
         scriptId: task.scriptId,
+        // 分段任务带计划 ID：前端据此在聊天流里隐藏卡片，只由分段面板展示结果
+        planId: task.planId ?? null,
         status: task.status,
         generatedVideoUrl: task.generatedVideoUrl,
         errorMessage: task.errorMessage,
