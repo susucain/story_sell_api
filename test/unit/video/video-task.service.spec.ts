@@ -500,6 +500,128 @@ describe('VideoTaskService video generation', () => {
     ).rejects.toThrow('原片尾帧不可用');
   });
 
+  it('分段生成的第 1 段带上主角色人像与会话参考图', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Segment 1',
+      meta: {
+        character: {
+          mode: 'user_portrait',
+          primaryAssetId: 30,
+          selectionSource: 'user_explicit',
+        },
+      },
+    });
+    assetRepo.findOne.mockImplementation(({ where }) => {
+      if ('url' in where) return Promise.resolve(null);
+      return where.id === 30
+        ? Promise.resolve({
+            id: 30,
+            assetType: 'image',
+            url: 'https://example.test/portrait.png',
+          })
+        : Promise.resolve(null);
+    });
+    assetRepo.find.mockResolvedValueOnce([
+      { id: 30, assetType: 'image', url: 'https://example.test/portrait.png' },
+      { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
+    ]);
+
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+      segment: {
+        planId: 7,
+        segmentIndex: 1,
+        prompt: 'segment 1 prompt',
+        duration: 8,
+        continuityMode: 'extend',
+      },
+    });
+
+    expect(createdTaskParams).toEqual(
+      expect.objectContaining({
+        imageUrls: [
+          'https://example.test/portrait.png',
+          'https://example.test/product.png',
+        ],
+        firstFrameUrl: undefined,
+      }),
+    );
+  });
+
+  it('分段生成的延长段同时带上参考图与上一段成片', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Segment 2',
+      meta: { character: { mode: 'none', selectionSource: 'auto_selected' } },
+    });
+    assetRepo.find.mockResolvedValueOnce([
+      { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
+    ]);
+
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+      segment: {
+        planId: 7,
+        segmentIndex: 2,
+        prompt: 'segment 2 prompt',
+        duration: 8,
+        continuityMode: 'extend',
+        prevTask: {
+          taskId: 'task-prev',
+          generatedVideoUrl: 'https://example.test/segment-1.mp4',
+        } as any,
+      },
+    });
+
+    expect(createdTaskParams).toEqual(
+      expect.objectContaining({
+        imageUrls: ['https://example.test/product.png'],
+        videoUrls: ['https://example.test/segment-1.mp4'],
+        firstFrameUrl: undefined,
+      }),
+    );
+  });
+
+  it('首帧模式的段只传首帧，不附加参考图', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10,
+      sessionId: 'session-1',
+      userId: 1,
+      seedancePrompt: 'Segment 2 frame bridge',
+      meta: { character: { mode: 'none', selectionSource: 'auto_selected' } },
+    });
+
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+      segment: {
+        planId: 7,
+        segmentIndex: 2,
+        prompt: 'segment 2 prompt',
+        duration: 8,
+        continuityMode: 'frame_bridge',
+        prevTask: {
+          taskId: 'task-prev',
+          lastFrameUrl: 'https://example.test/segment-1-last-frame.png',
+        } as any,
+      },
+    });
+
+    expect(createdTaskParams).toEqual(
+      expect.objectContaining({
+        imageUrls: undefined,
+        firstFrameUrl: 'https://example.test/segment-1-last-frame.png',
+      }),
+    );
+  });
+
   it('参考素材超出官方上限时直接中断并提示用户移除素材', async () => {
     scriptRepo.findOne.mockResolvedValueOnce({
       id: 10,

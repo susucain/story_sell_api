@@ -385,7 +385,7 @@ export class VideoTaskService {
       );
     }
 
-    // 分段生成：续接段不使用会话参考素材，只依赖上一段的成片/尾帧
+    // 分段生成：每段都带主角色人像/会话参考图，并叠加上一段的成片/尾帧作为续接输入
     if (options.segment) {
       return this.createSegmentTask(script, options.segment, options.signal);
     }
@@ -409,15 +409,6 @@ export class VideoTaskService {
         assetPurpose: In(['reference', 'all']),
       },
     });
-    const characterImageUrl = await this.resolveCharacterImageUrl(script);
-    const primaryAssetId = (script.meta?.character as CharacterMeta | undefined)
-      ?.primaryAssetId;
-    const imageUrls = referenceAssets
-      .filter((a) => a.assetType === 'image')
-      .filter(
-        (a) => !Number.isInteger(primaryAssetId) || a.id !== primaryAssetId,
-      )
-      .map((a) => a.url);
     const videoUrls = fullVideoEdit
       ? [fullVideoEdit.sourceUrl]
       : continuation
@@ -435,12 +426,7 @@ export class VideoTaskService {
 
     const finalImageUrls = continuation
       ? undefined
-      : [
-          ...new Set([
-            ...(characterImageUrl ? [characterImageUrl] : []),
-            ...imageUrls,
-          ]),
-        ];
+      : await this.resolveReferenceImageUrls(script, referenceAssets);
     const finalVideoUrls = [...new Set(videoUrls)];
 
     // 参考素材数量超官方上限属于用户侧问题，本地无法送达：直接中断并提示用户精简素材
@@ -475,7 +461,8 @@ export class VideoTaskService {
   }
 
   /**
-   * 创建分段任务：按选择的衔接方式，把上一段成片或上一段尾帧作为本段输入
+   * 创建分段任务：每段都带主角色人像/会话参考图，并按衔接方式叠加
+   * 上一段成片或尾帧作为续接输入
    */
   private async createSegmentTask(
     script: VideoScript,
@@ -490,7 +477,6 @@ export class VideoTaskService {
       );
     }
 
-    let imageUrls: string[] | undefined;
     let videoUrls: string[] | undefined;
     let firstFrameUrl: string | undefined;
 
@@ -513,8 +499,30 @@ export class VideoTaskService {
       if (!prev?.generatedVideoUrl) {
         throw new BadRequestException('上一段成片尚未生成完成，无法延长生成');
       }
-      // 延长模式只上传要参考的视频，不上传参考图，避免出现重复人物
+      // 延长模式以上一段成片为底向后延长，同时仍带上参考图保持主体一致
       videoUrls = [prev.generatedVideoUrl];
+    }
+
+    // 每一段都带上主角色人像与会话参考图，跨段保持同一主体；
+    // 首帧模式（frame_bridge）与参考图在接口层互斥，此时只能传首帧。
+    let imageUrls: string[] | undefined;
+    if (!firstFrameUrl) {
+      const referenceAssets = await this.assetRepo.find({
+        where: {
+          sessionId: script.sessionId,
+          assetPurpose: In(['reference', 'all']),
+        },
+      });
+      const referenceImages = await this.resolveReferenceImageUrls(
+        script,
+        referenceAssets,
+      );
+      if (referenceImages.length > ASSET_REF_LIMITS.image) {
+        throw new BadRequestException(
+          `当前会话参考素材超出官方生成上限（图片 ${referenceImages.length}/${ASSET_REF_LIMITS.image} 张），请先移除多余素材后再生成。`,
+        );
+      }
+      imageUrls = referenceImages.length > 0 ? referenceImages : undefined;
     }
 
     const scriptRatio =
@@ -544,6 +552,32 @@ export class VideoTaskService {
     this.throwIfAborted(signal);
     await this.saveTaskEventMessage(task, 'video_generation_submitted');
     return task;
+  }
+
+  /**
+   * 解析可传给视频模型的参考图：主角色人像 + 会话内参考/分析素材
+   * （排除已由人像承载的 primaryAssetId，避免同一张图重复传参）。
+   * 单次生成与分段生成的每一段都复用同一套规则，保证主体跨段一致。
+   */
+  private async resolveReferenceImageUrls(
+    script: VideoScript,
+    referenceAssets: VideoAsset[],
+  ): Promise<string[]> {
+    const characterImageUrl = await this.resolveCharacterImageUrl(script);
+    const primaryAssetId = (script.meta?.character as CharacterMeta | undefined)
+      ?.primaryAssetId;
+    const imageUrls = referenceAssets
+      .filter((a) => a.assetType === 'image')
+      .filter(
+        (a) => !Number.isInteger(primaryAssetId) || a.id !== primaryAssetId,
+      )
+      .map((a) => a.url);
+    return [
+      ...new Set([
+        ...(characterImageUrl ? [characterImageUrl] : []),
+        ...imageUrls,
+      ]),
+    ];
   }
 
   private async resolveCharacterImageUrl(
