@@ -1,6 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 jest.mock('ai', () => ({}));
-jest.mock('../../../src/video/video-llm.service', () => ({ VideoLLMService: class {} }));
+jest.mock('../../../src/video/video-llm.service', () => ({
+  VideoLLMService: class {},
+}));
 import { VideoService } from '../../../src/video/video.service';
 import { VideoTaskService } from '../../../src/video/video-task.service';
 

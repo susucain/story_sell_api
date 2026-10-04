@@ -22,6 +22,7 @@ describe('VideoToolsService role scoping', () => {
       undefined as never,
       undefined as never,
       new VideoAgentExecutionService({ get: () => undefined } as never),
+      undefined as never,
     );
 
   const ctx = { sessionId: 'session-1', userId: 1 };
@@ -115,6 +116,7 @@ describe('VideoToolsService continuation validation', () => {
       undefined as never,
       undefined as never,
       new VideoAgentExecutionService({ get: () => undefined } as never),
+      undefined as never,
     );
 
   const continuationCtx = {
@@ -223,6 +225,7 @@ describe('VideoToolsService 参考素材上限', () => {
       undefined as never,
       new SeedancePromptValidatorService(),
       new VideoAgentExecutionService({ get: () => undefined } as never),
+      undefined as never,
     );
 
   const ctx = {
@@ -284,6 +287,7 @@ describe('VideoToolsService creative brief tool', () => {
       undefined as never,
       undefined as never,
       new VideoAgentExecutionService({ get: () => undefined } as never),
+      undefined as never,
     );
 
   it('exposes update_creative_brief instead of the e-commerce profile tool', () => {

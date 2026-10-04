@@ -1,5 +1,8 @@
 import { generateObject } from 'ai';
-import { VideoAgentExecutionService, VideoAgentTimeoutError } from '../../../src/video/video-agent-execution.service';
+import {
+  VideoAgentExecutionService,
+  VideoAgentTimeoutError,
+} from '../../../src/video/video-agent-execution.service';
 import { VideoAsset } from '../../../src/video/entities/video-asset.entity';
 import { ProcessTracker } from '../../../src/video/process-tracker';
 import { VideoAssetAnalysisService } from '../../../src/video/video-asset-analysis.service';
@@ -13,7 +16,9 @@ jest.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: jest.fn(),
 }));
 
-const mockedGenerateObject = generateObject as jest.MockedFunction<typeof generateObject>;
+const mockedGenerateObject = generateObject as jest.MockedFunction<
+  typeof generateObject
+>;
 
 function createAsset(id: number): VideoAsset {
   return {
@@ -83,7 +88,9 @@ describe('VideoAssetAnalysisService', () => {
     assetRepo.find.mockResolvedValue([1, 2, 3, 4, 5].map(createAsset));
     const calls = Array.from({ length: 5 }, () => deferred<any>());
     let nextCall = 0;
-    mockedGenerateObject.mockImplementation(() => calls[nextCall++]!.promise as any);
+    mockedGenerateObject.mockImplementation(
+      () => calls[nextCall++].promise as any,
+    );
 
     const batch = service.analyzePendingAssets('session-1', [1, 2, 3, 4, 5]);
 
@@ -110,7 +117,10 @@ describe('VideoAssetAnalysisService', () => {
   it('persists a successful visual analysis with its summary and category', async () => {
     assetRepo.find.mockResolvedValue([createAsset(1)]);
     mockedGenerateObject.mockResolvedValue({
-      object: { summary: 'A red bottle on a table', contentCategory: 'product' },
+      object: {
+        summary: 'A red bottle on a table',
+        contentCategory: 'product',
+      },
     } as any);
 
     const asset = {
@@ -120,7 +130,9 @@ describe('VideoAssetAnalysisService', () => {
     };
     assetRepo.find.mockResolvedValue([asset]);
 
-    await expect(service.analyzePendingAssets('session-1', [1])).resolves.toEqual([
+    await expect(
+      service.analyzePendingAssets('session-1', [1]),
+    ).resolves.toEqual([
       {
         assetId: 1,
         status: 'parsed',
@@ -128,16 +140,18 @@ describe('VideoAssetAnalysisService', () => {
         contentCategory: 'product',
       },
     ]);
-    expect(assetRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-      id: 1,
-      parsedContent: {
-        durationSec: 12,
-        summary: 'A red bottle on a table',
+    expect(assetRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 1,
+        parsedContent: {
+          durationSec: 12,
+          summary: 'A red bottle on a table',
+          contentCategory: 'product',
+        },
         contentCategory: 'product',
-      },
-      contentCategory: 'product',
-      status: 'parsed',
-    }));
+        status: 'parsed',
+      }),
+    );
   });
 
   it('records a timed out asset as failed while a sibling succeeds', async () => {
@@ -148,15 +162,24 @@ describe('VideoAssetAnalysisService', () => {
     };
     assetRepo.find.mockResolvedValue([timedOutAsset, createAsset(2)]);
     (executionService.runAssetParse as jest.Mock).mockImplementation(
-      (context, work) => context.assetId === 1
-        ? Promise.reject(new VideoAgentTimeoutError('ASSET_PARSE_TIMEOUT', 'asset_parse', 1))
-        : work(new AbortController().signal),
+      (context, work) =>
+        context.assetId === 1
+          ? Promise.reject(
+              new VideoAgentTimeoutError(
+                'ASSET_PARSE_TIMEOUT',
+                'asset_parse',
+                1,
+              ),
+            )
+          : work(new AbortController().signal),
     );
     mockedGenerateObject.mockResolvedValue({
       object: { summary: 'Fresh fruit', contentCategory: 'food' },
     } as any);
 
-    await expect(service.analyzePendingAssets('session-1', [1, 2])).resolves.toEqual([
+    await expect(
+      service.analyzePendingAssets('session-1', [1, 2]),
+    ).resolves.toEqual([
       { assetId: 1, status: 'failed', errorCode: 'ASSET_PARSE_TIMEOUT' },
       {
         assetId: 2,
@@ -165,21 +188,27 @@ describe('VideoAssetAnalysisService', () => {
         contentCategory: 'food',
       },
     ]);
-    expect(assetRepo.save).toHaveBeenCalledWith(expect.objectContaining({
-      id: 1,
-      parsedContent: {
-        durationSec: 9,
-        errorCode: 'ASSET_PARSE_TIMEOUT',
-      },
-      status: 'failed',
-    }));
+    expect(assetRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 1,
+        parsedContent: {
+          durationSec: 9,
+          errorCode: 'ASSET_PARSE_TIMEOUT',
+        },
+        status: 'failed',
+      }),
+    );
   });
 
   it('returns a failed result instead of rejecting the batch for a provider error', async () => {
     assetRepo.find.mockResolvedValue([createAsset(1)]);
-    mockedGenerateObject.mockRejectedValue(new Error('provider details must not escape'));
+    mockedGenerateObject.mockRejectedValue(
+      new Error('provider details must not escape'),
+    );
 
-    await expect(service.analyzePendingAssets('session-1', [1])).resolves.toEqual([
+    await expect(
+      service.analyzePendingAssets('session-1', [1]),
+    ).resolves.toEqual([
       { assetId: 1, status: 'failed', errorCode: 'ASSET_PARSE_FAILED' },
     ]);
   });
@@ -188,7 +217,9 @@ describe('VideoAssetAnalysisService', () => {
     assetRepo.find.mockResolvedValue([createAsset(1)]);
     assetRepo.update.mockResolvedValue({ affected: 0 });
 
-    await expect(service.analyzePendingAssets('session-1', [1])).resolves.toEqual([]);
+    await expect(
+      service.analyzePendingAssets('session-1', [1]),
+    ).resolves.toEqual([]);
     expect(mockedGenerateObject).not.toHaveBeenCalled();
   });
 
@@ -196,14 +227,18 @@ describe('VideoAssetAnalysisService', () => {
     const currentAsset = createAsset(1);
     const historicalAsset = createAsset(2);
     assetRepo.find.mockImplementation(async ({ where }) => {
-      const ids = (where.id as any)._value as number[];
-      return [currentAsset, historicalAsset].filter((asset) => ids.includes(asset.id));
+      const ids = where.id._value as number[];
+      return [currentAsset, historicalAsset].filter((asset) =>
+        ids.includes(asset.id),
+      );
     });
     mockedGenerateObject.mockResolvedValue({
       object: { summary: 'Current asset', contentCategory: 'product' },
     } as any);
 
-    await expect(service.analyzePendingAssets('session-1', [1])).resolves.toEqual([
+    await expect(
+      service.analyzePendingAssets('session-1', [1]),
+    ).resolves.toEqual([
       {
         assetId: 1,
         status: 'parsed',
@@ -212,11 +247,13 @@ describe('VideoAssetAnalysisService', () => {
       },
     ]);
     expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
-    expect(assetRepo.find).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        id: expect.objectContaining({ _value: [1] }),
+    expect(assetRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: expect.objectContaining({ _value: [1] }),
+        }),
       }),
-    }));
+    );
   });
 
   it('rethrows a parent request cancellation before starting model work', async () => {
@@ -235,10 +272,12 @@ describe('VideoAssetAnalysisService', () => {
     assetRepo.find.mockResolvedValue([createAsset(1)]);
     const controller = new AbortController();
     const reason = new Error('request cancelled');
-    (executionService.runAssetParse as jest.Mock).mockImplementation(async () => {
-      controller.abort(reason);
-      throw new Error('provider failure');
-    });
+    (executionService.runAssetParse as jest.Mock).mockImplementation(
+      async () => {
+        controller.abort(reason);
+        throw new Error('provider failure');
+      },
+    );
 
     await expect(
       service.analyzePendingAssets('session-1', [1], controller.signal),
@@ -254,10 +293,12 @@ describe('VideoAssetAnalysisService', () => {
     assetRepo.find.mockResolvedValue([asset]);
     const controller = new AbortController();
     const reason = new Error('request cancelled');
-    (executionService.runAssetParse as jest.Mock).mockImplementation(async () => {
-      controller.abort(reason);
-      throw reason;
-    });
+    (executionService.runAssetParse as jest.Mock).mockImplementation(
+      async () => {
+        controller.abort(reason);
+        throw reason;
+      },
+    );
 
     await expect(
       service.analyzePendingAssets('session-1', [1], controller.signal),
@@ -286,7 +327,9 @@ describe('ProcessTracker asset failures', () => {
     tracker.markAssetFailed(1, 'ASSET_PARSE_TIMEOUT');
 
     const state = writer.write.mock.calls.at(-1)![0].data;
-    const phase = state.phases.find((item: any) => item.id === 'parse-materials');
+    const phase = state.phases.find(
+      (item: any) => item.id === 'parse-materials',
+    );
     expect(phase.status).toBe('completed');
     expect(phase.items[0]).toMatchObject({
       status: 'error',
@@ -319,7 +362,9 @@ describe('ProcessTracker asset failures', () => {
     tracker.start();
 
     const state = writer.write.mock.calls.at(-1)![0].data;
-    const phase = state.phases.find((item: any) => item.id === 'parse-materials');
+    const phase = state.phases.find(
+      (item: any) => item.id === 'parse-materials',
+    );
     expect(phase.status).toBe('completed');
     expect(phase.items[0]).toMatchObject({
       status: 'error',

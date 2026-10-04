@@ -13,7 +13,12 @@ export class VideoSession {
   @PrimaryGeneratedColumn({ comment: '主键ID' })
   id: number;
 
-  @Column({ name: 'session_id', length: 64, unique: true, comment: '会话ID（UUID）' })
+  @Column({
+    name: 'session_id',
+    length: 64,
+    unique: true,
+    comment: '会话ID（UUID）',
+  })
   sessionId: string;
 
   @Column({ name: 'user_id', comment: '关联用户ID' })
@@ -31,7 +36,12 @@ export class VideoSession {
   })
   creativeBrief: Record<string, any>;
 
-  @Column({ name: 'status', length: 32, default: 'active', comment: '会话状态' })
+  @Column({
+    name: 'status',
+    length: 32,
+    default: 'active',
+    comment: '会话状态',
+  })
   status: string;
 
   @CreateDateColumn({ name: 'created_at', comment: '创建时间' })

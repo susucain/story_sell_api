@@ -33,6 +33,8 @@ export interface RoleAgentOutput {
 
 export interface OrchestratorToolContext {
   requestId?: string;
+  /** 本轮 runId，透传给子 Agent 工具用于副作用台账 */
+  runId?: string;
   sessionId: string;
   userId: number;
   currentMessageId?: number;
@@ -104,7 +106,10 @@ export class AgentOrchestratorService {
       const remainingMs = totalBudgetMs - (Date.now() - startedAt);
       const role = this.roleRegistry.getRoleProfile(roleId);
       const output = await this.runRoleAgent(role, brief, context, {
-        timeoutMs: Math.min(remainingMs, this.executionService.roleAgentTimeoutMs),
+        timeoutMs: Math.min(
+          remainingMs,
+          this.executionService.roleAgentTimeoutMs,
+        ),
         mutationState: context.mutationState,
       });
       outputs.push({ role: roleId, output });
@@ -197,6 +202,7 @@ export class AgentOrchestratorService {
           tools: this.toolsService.buildTools(
             {
               requestId: context.requestId,
+              runId: context.runId,
               sessionId: context.sessionId,
               userId: context.userId,
               currentMessageId: context.currentMessageId,

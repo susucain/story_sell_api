@@ -162,7 +162,7 @@ export class VideoAssetAnalysisService {
       );
       this.throwIfParentAborted(parentSignal);
       const parsed = result.object;
-      const contentCategory = parsed.contentCategory as AssetContentCategory;
+      const contentCategory = parsed.contentCategory;
       asset.parsedContent = {
         ...(asset.parsedContent ?? {}),
         summary: parsed.summary,

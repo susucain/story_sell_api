@@ -95,16 +95,22 @@ export class ProcessTracker {
         status: 'running',
         startTime: this.now(),
         items: analysisAssets.map((asset) => {
-          const parsed = asset.parsedContent as { summary?: string } | undefined;
+          const parsed = asset.parsedContent as
+            | { summary?: string }
+            | undefined;
           const isParsed = asset.status === 'parsed';
           return {
             id: `asset-${asset.id}`,
-            title: asset.name || `${asset.assetType === 'video' ? '视频' : '图片'}素材`,
+            title:
+              asset.name ||
+              `${asset.assetType === 'video' ? '视频' : '图片'}素材`,
             description: isParsed
-              ? parsed?.summary ?? '已完成解析'
+              ? (parsed?.summary ?? '已完成解析')
               : '等待解析',
             status: isParsed ? 'completed' : 'pending',
-            tag: isParsed ? { text: '已解析', type: 'success' as const } : undefined,
+            tag: isParsed
+              ? { text: '已解析', type: 'success' as const }
+              : undefined,
           };
         }),
       });
@@ -120,21 +126,21 @@ export class ProcessTracker {
     });
 
     const duration = options.creativeBrief?.duration as number | undefined;
-    const estimatedShots = duration ? Math.max(1, Math.ceil(duration / 5)) : undefined;
+    const estimatedShots = duration
+      ? Math.max(1, Math.ceil(duration / 5))
+      : undefined;
 
     phases.push({
       id: 'generate-script',
-      title: options.isModification ? '修改并生成分镜脚本' : '提炼卖点并生成分镜脚本',
+      title: options.isModification
+        ? '修改并生成分镜脚本'
+        : '提炼卖点并生成分镜脚本',
       description: '结合素材与规范，输出结构化分镜脚本',
       status: 'running',
       startTime: this.now(),
+      // 仅保留「生成分镜脚本」；「更新产品画像」在 Agent 真正调用
+      // update_creative_brief 时才补入，未调用则整行不展示。
       actions: [
-        {
-          id: 'update-product-profile',
-          title: '更新产品画像',
-          description: '提炼核心卖点与视频参数',
-          status: 'pending',
-        },
         {
           id: 'generate-script-action',
           title: '生成分镜脚本',
@@ -174,8 +180,14 @@ export class ProcessTracker {
     this.emit();
     // 阶段 2 在 Skill 加载完成后即完成
     this.markPhaseDone('load-guidelines');
-    const materialPhase = this.state.phases.find((phase) => phase.id === 'parse-materials');
-    if (materialPhase?.items?.every((item) => item.status === 'completed' || item.status === 'error')) {
+    const materialPhase = this.state.phases.find(
+      (phase) => phase.id === 'parse-materials',
+    );
+    if (
+      materialPhase?.items?.every(
+        (item) => item.status === 'completed' || item.status === 'error',
+      )
+    ) {
       this.markPhaseDone('parse-materials');
     }
   }
@@ -209,7 +221,9 @@ export class ProcessTracker {
       item.description = summary;
       item.tag = { text: '已解析', type: 'success' };
     }
-    if (phase.items.every((i) => i.status === 'completed' || i.status === 'error')) {
+    if (
+      phase.items.every((i) => i.status === 'completed' || i.status === 'error')
+    ) {
       this.markPhaseDone('parse-materials');
     } else {
       this.emit();
@@ -228,21 +242,24 @@ export class ProcessTracker {
       item.description = '素材解析失败，可在后续请求中重试';
       item.tag = { text: '可重试', type: 'info' };
     }
-    if (phase.items.every((i) => i.status === 'completed' || i.status === 'error')) {
+    if (
+      phase.items.every((i) => i.status === 'completed' || i.status === 'error')
+    ) {
       this.markPhaseDone('parse-materials');
     } else {
       this.emit();
     }
   }
 
-  /** 标记产品画像正在更新 */
+  /** 标记产品画像正在更新；首次调用时补入该动作行 */
   markProfileRunning() {
     if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
-    if (!phase?.actions) return;
-    const action = phase.actions.find((a) => a.id === 'update-product-profile');
-    if (action) action.status = 'running';
+    if (!phase) return;
+    const action = this.ensureProfileAction(phase);
+    action.status = 'running';
+    action.tag = undefined;
     this.emit();
   }
 
@@ -254,21 +271,15 @@ export class ProcessTracker {
       this.creativeBrief = { ...(this.creativeBrief || {}), ...profile };
     }
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
-    if (!phase?.actions) return;
-    const action = phase.actions.find((a) => a.id === 'update-product-profile');
-    if (action) {
-      action.status = 'completed';
-      // 兼容老数据：新字段为 key_points，历史会话为 selling_points
-      const keyPoints = (this.creativeBrief?.key_points ??
-        this.creativeBrief?.selling_points) as string[] | undefined;
-      if (keyPoints && keyPoints.length > 0) {
-        action.description = `提炼 ${keyPoints.length} 个核心要点：${keyPoints.slice(0, 3).join('、')}`;
-      }
-      // 根据更新后的简报刷新生成动作的描述
-      const genAction = phase.actions.find((a) => a.id === 'generate-script-action');
-      if (genAction) {
-        genAction.description = this.buildGenerateDesc(this.creativeBrief);
-      }
+    if (!phase) return;
+    const action = this.ensureProfileAction(phase);
+    this.completeProfileAction(action);
+    // 根据更新后的简报刷新生成动作的描述
+    const genAction = phase.actions?.find(
+      (a) => a.id === 'generate-script-action',
+    );
+    if (genAction) {
+      genAction.description = this.buildGenerateDesc(this.creativeBrief);
     }
     this.emit();
   }
@@ -289,7 +300,9 @@ export class ProcessTracker {
     if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
-    const action = phase?.actions?.find((item) => item.id === 'generate-script-action');
+    const action = phase?.actions?.find(
+      (item) => item.id === 'generate-script-action',
+    );
     if (!action) return;
     action.status = 'running';
     action.title = '修正 Seedance 2.0 提示词';
@@ -308,7 +321,9 @@ export class ProcessTracker {
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
     if (!phase) return;
     if (phase.actions) {
-      const action = phase.actions.find((a) => a.id === 'generate-script-action');
+      const action = phase.actions.find(
+        (a) => a.id === 'generate-script-action',
+      );
       if (action) {
         action.status = 'completed';
         action.title = `生成 ${result.shot_count} 镜头分镜脚本`;
@@ -336,9 +351,13 @@ export class ProcessTracker {
   markScriptUnchanged(description: string) {
     if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
-    const phase = this.state.phases.find((item) => item.id === 'generate-script');
+    const phase = this.state.phases.find(
+      (item) => item.id === 'generate-script',
+    );
     if (!phase) return;
-    const action = phase.actions?.find((item) => item.id === 'generate-script-action');
+    const action = phase.actions?.find(
+      (item) => item.id === 'generate-script-action',
+    );
     if (action) {
       action.status = 'completed';
       action.title = '无需生成新版本';
@@ -348,18 +367,19 @@ export class ProcessTracker {
   }
 
   /** 本轮已完成分析，等待用户补充或确认后再开启下一轮。 */
-  waitForUser(input: {
-    title?: string;
-    description: string;
-  }) {
+  waitForUser(input: { title?: string; description: string }) {
     if (!this.started || this.finished) return;
     this.finished = true;
     const endTime = this.now();
-    const phase = this.state.phases.find((item) => item.id === 'generate-script');
+    const phase = this.state.phases.find(
+      (item) => item.id === 'generate-script',
+    );
     if (phase) {
       phase.status = 'waiting_for_user';
       phase.endTime = endTime;
-      const action = phase.actions?.find((item) => item.id === 'generate-script-action');
+      const action = phase.actions?.find(
+        (item) => item.id === 'generate-script-action',
+      );
       if (action) {
         action.status = 'waiting_for_user';
         action.title = input.title || '等待用户确认';
@@ -396,7 +416,12 @@ export class ProcessTracker {
         }
       });
       phase.actions?.forEach((action) => {
-        if (action.status === 'running') action.status = 'completed';
+        if (action.status !== 'running') return;
+        if (action.id === 'update-product-profile') {
+          this.completeProfileAction(action);
+        } else {
+          action.status = 'completed';
+        }
       });
     });
     this.state.status = 'completed';
@@ -429,7 +454,9 @@ export class ProcessTracker {
   markRoleDispatched(roleId: string, title: string) {
     if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
-    const phase = this.state.phases.find((item) => item.id === 'generate-script');
+    const phase = this.state.phases.find(
+      (item) => item.id === 'generate-script',
+    );
     if (!phase) return;
     const items = (phase.items ??= []);
     const itemId = `role-${roleId}`;
@@ -466,6 +493,36 @@ export class ProcessTracker {
     item.status = 'completed';
     item.description = `${item.title}已完成分派任务`;
     item.tag = { text: '已完成', type: 'success' };
+  }
+
+  /**
+   * 取「更新产品画像」动作行；首次调用时插入到动作列表最前，
+   * 使其始终排在「生成分镜脚本」之前。未调用过的会话不会补入该行。
+   */
+  private ensureProfileAction(phase: ProcessPhase): ProcessAction {
+    const actions = (phase.actions ??= []);
+    const existing = actions.find((a) => a.id === 'update-product-profile');
+    if (existing) return existing;
+    const action: ProcessAction = {
+      id: 'update-product-profile',
+      title: '更新产品画像',
+      description: '提炼核心卖点与视频参数',
+      status: 'pending',
+    };
+    actions.unshift(action);
+    return action;
+  }
+
+  /** 统一回写「更新产品画像」的完成态：描述 + 「已完成」标签 */
+  private completeProfileAction(action: ProcessAction) {
+    action.status = 'completed';
+    action.tag = { text: '已完成', type: 'success' };
+    // 兼容老数据：新字段为 key_points，历史会话为 selling_points
+    const keyPoints = (this.creativeBrief?.key_points ??
+      this.creativeBrief?.selling_points) as string[] | undefined;
+    if (keyPoints && keyPoints.length > 0) {
+      action.description = `提炼 ${keyPoints.length} 个核心要点：${keyPoints.slice(0, 3).join('、')}`;
+    }
   }
 
   private markPhaseDone(phaseId: ProcessPhase['id']) {

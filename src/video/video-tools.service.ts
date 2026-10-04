@@ -32,9 +32,26 @@ import {
   VideoAgentMutationState,
   VideoAgentTimeoutError,
 } from './video-agent-execution.service';
+import { ToolLedgerService, isSideEffectTool } from './tool-ledger.service';
+
+/** 从工具返回值里取出产出物引用（脚本ID / 视频任务ID），供台账记录 */
+function extractResultRef(
+  toolName: string,
+  result: unknown,
+): string | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const record = result as Record<string, unknown>;
+  const key = toolName === 'generate_script' ? 'script_id' : 'task_id';
+  const value = record[key] ?? record.id;
+  return typeof value === 'number' || typeof value === 'string'
+    ? String(value)
+    : undefined;
+}
 
 interface ToolContext {
   requestId?: string;
+  /** 本轮 runId；有值时副作用工具调用会写入台账，供崩溃对账 */
+  runId?: string;
   sessionId: string;
   userId: number;
   currentMessageId?: number;
@@ -92,6 +109,7 @@ export class VideoToolsService {
     private planService: VideoGenerationPlanService,
     private seedancePromptValidator: SeedancePromptValidatorService,
     private readonly executionService: VideoAgentExecutionService,
+    private readonly toolLedger: ToolLedgerService,
   ) {}
 
   /**
@@ -167,7 +185,7 @@ export class VideoToolsService {
                   : executionService.runTool.bind(executionService);
 
               try {
-                return await run(
+                const result: unknown = await run(
                   {
                     requestId: context.requestId,
                     sessionId: context.sessionId,
@@ -182,7 +200,24 @@ export class VideoToolsService {
                       mutationState,
                     }),
                 );
+                // 副作用工具落台账：崩溃后作为「本轮是否已产出交付物」的证据
+                if (context.runId && isSideEffectTool(toolName)) {
+                  await this.toolLedger.recordSuccess(
+                    context.runId,
+                    toolName,
+                    input,
+                    extractResultRef(toolName, result),
+                  );
+                }
+                return result;
               } catch (error) {
+                if (context.runId && isSideEffectTool(toolName)) {
+                  await this.toolLedger.recordFailure(
+                    context.runId,
+                    toolName,
+                    input,
+                  );
+                }
                 if (
                   error instanceof VideoAgentTimeoutError &&
                   error.code === 'TOOL_TIMEOUT'

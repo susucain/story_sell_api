@@ -11,6 +11,13 @@ import { VideoGenerationPlan } from './entities/video-generation-plan.entity';
 import { VideoMessage } from './entities/video-message.entity';
 import { VideoAsset } from './entities/video-asset.entity';
 import { VideoScript } from './entities/video-script.entity';
+import { AgentRun } from './entities/agent-run.entity';
+import { ToolInvocation } from './entities/tool-invocation.entity';
+import { AgentRunService } from './agent-run.service';
+import { RunEventService } from './run-event.service';
+import { RunCancelService } from './run-cancel.service';
+import { ToolLedgerService } from './tool-ledger.service';
+import { RunMaintenanceService } from './run-maintenance.service';
 import { VideoLLMService } from './video-llm.service';
 import { SkillLoaderService } from './skill-loader.service';
 import { AgentRoleRegistryService } from './agent-role.registry';
@@ -40,6 +47,11 @@ import { OssModule } from '../oss/oss.module';
     SeedancePromptValidatorService,
     VideoAgentExecutionService,
     VideoAssetAnalysisService,
+    AgentRunService,
+    RunEventService,
+    RunCancelService,
+    ToolLedgerService,
+    RunMaintenanceService,
   ],
   imports: [
     ToolModule,
@@ -51,6 +63,8 @@ import { OssModule } from '../oss/oss.module';
       VideoMessage,
       VideoAsset,
       VideoScript,
+      AgentRun,
+      ToolInvocation,
     ]),
     BullModule.registerQueue({
       name: 'video-tasks',

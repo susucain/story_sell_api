@@ -1,7 +1,7 @@
 jest.mock('ai', () => ({
   ToolLoopAgent: class {},
   createUIMessageStream: jest.fn(),
-  pipeUIMessageStreamToResponse: jest.fn(),
+  pipeUIMessageStreamToResponse: jest.fn(() => Promise.resolve()),
   convertToModelMessages: jest.fn().mockResolvedValue([]),
   getToolName: jest.fn(),
   isStepCount: jest.fn(),
@@ -32,9 +32,16 @@ const mockedCreateUIMessageStream =
   createUIMessageStream as jest.MockedFunction<typeof createUIMessageStream>;
 
 describe('video agent stream errors', () => {
-  it('passes a client disconnect signal to chat work but ignores a normally finished response close', async () => {
+  it('detaches the subscription on client disconnect without aborting the run', async () => {
     const streamChat = jest.fn().mockResolvedValue(new ReadableStream());
-    const controller = new VideoController({ streamChat } as any, {} as any);
+    const runService = agentRunStub();
+    const controller = new VideoController(
+      { streamChat } as any,
+      {} as any,
+      {} as any,
+      runService as any,
+      runEventStub() as any,
+    );
     const request = new EventEmitter() as any;
     const response = Object.assign(new EventEmitter(), {
       locals: { requestId: 'request-1' },
@@ -50,8 +57,15 @@ describe('video agent stream errors', () => {
 
     const parentSignal = streamChat.mock.calls[0][2]
       .parentSignal as AbortSignal;
+    const run = runService.runs[0];
     request.emit('aborted');
-    expect(parentSignal.aborted).toBe(true);
+    // Phase 2：断开只解绑订阅，run 继续执行
+    expect(parentSignal.aborted).toBe(false);
+    expect(run.controller.signal.aborted).toBe(false);
+
+    // 显式取消才是唯一的中止来源
+    await runService.cancel(run.sessionId, 7);
+    expect(run.controller.signal.aborted).toBe(true);
 
     const finishedRequest = new EventEmitter() as any;
     const finishedResponse = Object.assign(new EventEmitter(), {
@@ -72,7 +86,13 @@ describe('video agent stream errors', () => {
   });
 
   it('does not include malformed message content in validation errors', async () => {
-    const controller = new VideoController({} as any, {} as any);
+    const controller = new VideoController(
+      {} as any,
+      {} as any,
+      {} as any,
+      agentRunStub() as any,
+      runEventStub() as any,
+    );
     const request = new EventEmitter() as any;
     const response = Object.assign(new EventEmitter(), {
       locals: { requestId: 'request-1' },
@@ -886,6 +906,68 @@ function deferred<T>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+/** 最小可用的 run 服务替身：每次 startRun 返回持有真实 AbortController 的运行。 */
+function agentRunStub() {
+  const runs: Array<{
+    runId: string;
+    sessionId: string;
+    userId: number;
+    controller: AbortController;
+    signal: AbortSignal;
+    startedAt: Date;
+    errorCode: string | null;
+    settled: boolean;
+  }> = [];
+  return {
+    runs,
+    startRun: jest.fn((sessionId: string, userId: number) => {
+      const runController = new AbortController();
+      const run = {
+        runId: `run-${runs.length + 1}`,
+        sessionId,
+        userId,
+        controller: runController,
+        signal: runController.signal,
+        startedAt: new Date(),
+        errorCode: null as string | null,
+        settled: false,
+      };
+      runs.push(run);
+      return Promise.resolve(run);
+    }),
+    markError: jest.fn((run: { errorCode: string | null }, code: string) => {
+      run.errorCode = run.errorCode ?? code;
+    }),
+    finalize: jest.fn().mockResolvedValue(undefined),
+    watchStream: jest.fn().mockResolvedValue(undefined),
+    cancel: jest.fn((sessionId: string, userId?: number) => {
+      const run = runs.find(
+        (candidate) =>
+          candidate.sessionId === sessionId &&
+          (userId === undefined || candidate.userId === userId),
+      );
+      if (!run) return Promise.resolve(false);
+      run.errorCode = run.errorCode ?? 'user_cancelled';
+      if (!run.controller.signal.aborted) {
+        run.controller.abort(new Error('user_cancelled'));
+      }
+      return Promise.resolve(true);
+    }),
+    getActive: jest.fn(),
+    findByRunId: jest.fn(),
+  };
+}
+
+/** run 事件服务替身：录制直接透传，不触碰 Redis。 */
+function runEventStub() {
+  return {
+    recordStream: jest.fn((_runId: string, stream: ReadableStream) => stream),
+    append: jest.fn().mockResolvedValue('1-0'),
+    readAfter: jest.fn().mockResolvedValue([]),
+    readAfterBlocking: jest.fn().mockResolvedValue(null),
+  };
 }
 
 function scriptInput() {

@@ -33,6 +33,7 @@ import { VideoToolsService } from './video-tools.service';
 import { VideoTaskService, MAX_VIDEO_DURATION_SEC } from './video-task.service';
 import { VideoAssetAnalysisService } from './video-asset-analysis.service';
 import { ProcessTracker } from './process-tracker';
+import { StreamStepAnnotator, TextMetaDataPart } from './stream-step-annotator';
 import { assertAgentFinalReply } from './agent-reply.validation';
 import {
   VideoAgentExecutionService,
@@ -119,6 +120,8 @@ export class VideoService {
       parentSignal?: AbortSignal;
       onError?: (error: unknown) => string;
       retry?: boolean;
+      /** 本轮 runId，用于把副作用工具调用写入台账 */
+      runId?: string;
     },
   ) {
     const session = await this.ensureSession(sessionId, options.userId);
@@ -140,7 +143,9 @@ export class VideoService {
 
       if (options.retry) {
         const retryAssetUrls = (saved.parts ?? [])
-          .filter((part: any) => part.type === 'file' && typeof part.url === 'string')
+          .filter(
+            (part: any) => part.type === 'file' && typeof part.url === 'string',
+          )
           .map((part: any) => part.url);
         if (retryAssetUrls.length > 0) {
           const retryAssets = await this.assetRepo.find({
@@ -231,7 +236,7 @@ export class VideoService {
         ? {
             mode: 'continuation',
             sourceAssetId: sourceVideoAsset.id,
-            sourceDurationSec: sourceVideoAsset.parsedContent!.durationSec,
+            sourceDurationSec: sourceVideoAsset.parsedContent.durationSec,
             continuityMode: this.resolveContinuityMode(options.continuityMode),
           }
         : undefined;
@@ -267,6 +272,7 @@ export class VideoService {
       }
     }
     let completed = false;
+    const replyText: string[] = [];
 
     return createUIMessageStream({
       originalMessages: allUiMessages,
@@ -343,6 +349,7 @@ export class VideoService {
             currentMessageId,
             parentSignal: totalSignal,
             mutationState: requestMutationState,
+            runId: options.runId,
             abortRequest,
             referencedVersion: referencedScript?.version,
             vertical: verticalId,
@@ -354,7 +361,7 @@ export class VideoService {
                 ? {
                     sourceAssetId: sourceVideoAsset.id,
                     sourceDurationSec:
-                      sourceVideoAsset.parsedContent!.durationSec,
+                      sourceVideoAsset.parsedContent.durationSec,
                   }
                 : undefined,
             continuation: continuation
@@ -371,6 +378,7 @@ export class VideoService {
                 ...baseTools,
                 ...this.orchestrator.buildDispatchTools({
                   requestId: options.requestId,
+                  runId: options.runId,
                   sessionId,
                   userId,
                   currentMessageId,
@@ -428,6 +436,15 @@ export class VideoService {
                     parentSignal: totalSignal,
                   },
                 );
+                // 给文本 part 标注 step 归属与角色（过程旁白 / 最终答复），
+                // 前端据此分区，避免用「最后一个工具调用下标」猜测导致旁白闪现。
+                const annotator = new StreamStepAnnotator((meta) => {
+                  const part: TextMetaDataPart = {
+                    type: 'data-text-meta',
+                    data: meta,
+                  };
+                  writer.write(part);
+                });
                 const trackedStream = watchedStream.pipeThrough(
                   new TransformStream({
                     transform: (chunk, controller) => {
@@ -436,13 +453,12 @@ export class VideoService {
                         tracker,
                         toolCallMap,
                       );
-                      controller.enqueue(chunk);
+                      controller.enqueue(annotator.annotate(chunk as any));
                     },
                   }),
                 );
 
                 // 手动消费流，确保所有 chunk 处理完成后再结束过程面板
-                const replyText: string[] = [];
                 for await (const chunk of trackedStream as any) {
                   if (totalSignal.aborted) {
                     throw totalSignal.reason;
@@ -499,11 +515,7 @@ export class VideoService {
           .filter((m) => m.role === 'assistant')
           .pop();
         if (assistant) {
-          await this.saveAssistantUIMessage(
-            sessionId,
-            userId,
-            assistant as UIMessage,
-          );
+          await this.saveAssistantUIMessage(sessionId, userId, assistant);
         }
       },
     });
@@ -561,9 +573,9 @@ export class VideoService {
     const invalidToolInput = error instanceof InvalidToolInputError;
     if (!invalidToolInput) return 'An error occurred.';
 
-    const cause = (error as InvalidToolInputError).cause;
+    const cause = error.cause;
     const detail = cause instanceof Error ? cause.message : String(cause ?? '');
-    const toolName = (error as InvalidToolInputError).toolName;
+    const toolName = error.toolName;
     this.logger.warn(
       JSON.stringify({
         event: 'tool_input_invalid',
@@ -689,7 +701,7 @@ export class VideoService {
           ]) as unknown as UIMessage['parts'],
       createdAt: m.createdAt,
       metadata: m.metadata ?? undefined,
-    })) as UIMessage[];
+    }));
   }
 
   private async getRecentUIMessages(
@@ -713,7 +725,7 @@ export class VideoService {
           ]) as unknown as UIMessage['parts'],
       createdAt: m.createdAt,
       metadata: m.metadata ?? undefined,
-    })) as UIMessage[];
+    }));
   }
 
   private async findLatestUserMessage(
@@ -794,7 +806,7 @@ export class VideoService {
           ]) as unknown as UIMessage['parts'],
       createdAt: m.createdAt,
       metadata: m.metadata ?? undefined,
-    })) as UIMessage[];
+    }));
   }
 
   private createReferencedScriptMessage(
@@ -821,7 +833,7 @@ export class VideoService {
           ].join('\n'),
         },
       ],
-    } as UIMessage;
+    };
   }
 
   /**
@@ -966,7 +978,7 @@ export class VideoService {
     prompt += `\n## 持久化约束\n${persistenceLines.join('\n')}\n`;
 
     if (sourceVideoAsset && !continuation) {
-      const durationSec = sourceVideoAsset.parsedContent!.durationSec;
+      const durationSec = sourceVideoAsset.parsedContent.durationSec;
       prompt += `\n## 编辑模式锁定（最高优先级）\n`;
       prompt += `当前请求来自“引用视频修改”入口，模式已锁定为完整视频编辑，不需要根据用户措辞重新判断模式。\n`;
       prompt += `原视频素材 ID：${sourceVideoAsset.id}；原视频完整时长：${durationSec} 秒；引用脚本版本：${referencedScript ? `V${referencedScript.version}` : '无'}。\n`;
@@ -976,7 +988,7 @@ export class VideoService {
     }
 
     if (sourceVideoAsset && continuation) {
-      const durationSec = sourceVideoAsset.parsedContent!.durationSec;
+      const durationSec = sourceVideoAsset.parsedContent.durationSec;
       const lastShot = referencedScript?.shots?.length
         ? referencedScript.shots[referencedScript.shots.length - 1]
         : null;
@@ -1075,14 +1087,15 @@ export class VideoService {
         }) || [];
 
     // 提取 generate_script 生成的 script_id，便于前端从历史消息中快速定位脚本
-    const generatedScriptId = message.parts
-      ?.filter((p: any) => isToolUIPart(p))
-      .map((p: any) => {
-        if (getToolName(p) !== 'generate_script') return null;
-        const output = 'output' in p ? p.output : undefined;
-        return output && typeof output === 'object' ? output.script_id : null;
-      })
-      .find((id): id is number => typeof id === 'number');
+    const generatedScriptId =
+      message.parts
+        ?.filter((p: any) => isToolUIPart(p))
+        .map((p: any) => {
+          if (getToolName(p) !== 'generate_script') return null;
+          const output = 'output' in p ? p.output : undefined;
+          return output && typeof output === 'object' ? output.script_id : null;
+        })
+        .find((id): id is number => typeof id === 'number');
 
     await this.messageRepo.save({
       sessionId,

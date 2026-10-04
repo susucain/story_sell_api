@@ -114,3 +114,49 @@ describe('ProcessTracker role items', () => {
     expect(item?.tag?.type).toBe('success');
   });
 });
+
+describe('ProcessTracker profile action', () => {
+  const findAction = (phases: ProcessState['phases'], actionId: string) =>
+    phases
+      .find((phase) => phase.id === 'generate-script')
+      ?.actions?.find((action) => action.id === actionId);
+
+  it('omits the profile action until the brief is updated', () => {
+    const { tracker, lastState } = createTracker();
+    tracker.start();
+    tracker.markGenerating();
+
+    expect(
+      findAction(lastState().phases, 'update-product-profile'),
+    ).toBeUndefined();
+  });
+
+  it('shows the profile action as completed with a tag once the brief is updated', () => {
+    const { tracker, lastState } = createTracker();
+    tracker.start();
+
+    tracker.markProfileRunning();
+    tracker.markProfileUpdated({ key_points: ['卖点一', '卖点二'] });
+
+    const phases = lastState().phases;
+    const profile = findAction(phases, 'update-product-profile');
+    expect(profile?.status).toBe('completed');
+    expect(profile?.tag).toEqual({ text: '已完成', type: 'success' });
+    // 补入后仍排在「生成分镜脚本」之前
+    expect(
+      phases.find((phase) => phase.id === 'generate-script')?.actions?.[0]?.id,
+    ).toBe('update-product-profile');
+  });
+
+  it('completes a still-running profile action when the stream ends', () => {
+    const { tracker, lastState } = createTracker();
+    tracker.start();
+    tracker.markProfileRunning();
+
+    tracker.finish();
+
+    const profile = findAction(lastState().phases, 'update-product-profile');
+    expect(profile?.status).toBe('completed');
+    expect(profile?.tag?.text).toBe('已完成');
+  });
+});

@@ -27,6 +27,8 @@ import { VideoGenerationPlan } from './video/entities/video-generation-plan.enti
 import { VideoMessage } from './video/entities/video-message.entity';
 import { VideoAsset } from './video/entities/video-asset.entity';
 import { VideoScript } from './video/entities/video-script.entity';
+import { AgentRun } from './video/entities/agent-run.entity';
+import { ToolInvocation } from './video/entities/tool-invocation.entity';
 import { LangfuseModule } from './langfuse/langfuse.module';
 import { AuthModule } from './auth/auth.module';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -63,8 +65,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
         },
         defaults: {
           // 默认发件人显示名称
-          from:
-            configService.get<string>('MAIL_FROM')
+          from: configService.get<string>('MAIL_FROM'),
         },
       }),
     }),
@@ -78,7 +79,20 @@ import { ThrottlerModule } from '@nestjs/throttler';
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
         connectorPackage: 'mysql2',
-        entities: [User, AuthSession, Job, OssFile, VideoSession, VideoTask, VideoGenerationPlan, VideoMessage, VideoAsset, VideoScript],
+        entities: [
+          User,
+          AuthSession,
+          Job,
+          OssFile,
+          VideoSession,
+          VideoTask,
+          VideoGenerationPlan,
+          VideoMessage,
+          VideoAsset,
+          VideoScript,
+          AgentRun,
+          ToolInvocation,
+        ],
         synchronize: configService.get<string>('DB_SYNCHRONIZE') === 'true',
         migrations: [join(__dirname, 'database/migrations/*{.js,.ts}')],
         migrationsRun: configService.get<string>('RUN_MIGRATIONS') === 'true',
@@ -94,23 +108,27 @@ import { ThrottlerModule } from '@nestjs/throttler';
         const redisUrl = configService.get<string>('REDIS_URL');
         const parsedUrl = redisUrl ? new URL(redisUrl) : undefined;
         const redis = {
-          host: parsedUrl?.hostname || configService.get<string>('REDIS_HOST') || 'localhost',
+          host:
+            parsedUrl?.hostname ||
+            configService.get<string>('REDIS_HOST') ||
+            'localhost',
           port: parsedUrl?.port
             ? Number(parsedUrl.port)
             : Number(configService.get<string>('REDIS_PORT') || 6379),
           password: parsedUrl?.password
             ? decodeURIComponent(parsedUrl.password)
             : configService.get<string>('REDIS_PASSWORD') || undefined,
-          db: parsedUrl?.pathname && parsedUrl.pathname !== '/'
-            ? Number(parsedUrl.pathname.slice(1))
-            : undefined,
+          db:
+            parsedUrl?.pathname && parsedUrl.pathname !== '/'
+              ? Number(parsedUrl.pathname.slice(1))
+              : undefined,
           tls: parsedUrl?.protocol === 'rediss:' ? {} : undefined,
           enableReadyCheck: false,
           maxRetriesPerRequest: null,
         };
         return {
           redis,
-        } as any;
+        };
       },
     }),
     UsersModule,
@@ -125,4 +143,4 @@ import { ThrottlerModule } from '@nestjs/throttler';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

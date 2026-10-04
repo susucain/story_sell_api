@@ -1,4 +1,10 @@
-export type ProcessStatus = 'pending' | 'running' | 'waiting_for_user' | 'completed' | 'error' | 'skipped';
+export type ProcessStatus =
+  | 'pending'
+  | 'running'
+  | 'waiting_for_user'
+  | 'completed'
+  | 'error'
+  | 'skipped';
 
 export interface ProcessItem {
   id: string;
@@ -25,6 +31,8 @@ export interface ProcessAction {
   title: string;
   description?: string;
   status: 'pending' | 'running' | 'waiting_for_user' | 'completed' | 'error';
+  /** 小标签，如「已完成」 */
+  tag?: { text: string; type: 'success' | 'info' };
 }
 
 export interface ProcessOutput {

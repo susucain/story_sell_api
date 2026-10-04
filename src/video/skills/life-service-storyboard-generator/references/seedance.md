@@ -30,5 +30,5 @@
 
 完整视频编辑的 `meta.edit` 必须包含 `mode: "full_video_edit"`、`sourceAssetId`、`sourceDurationSec`、`targetStartSec`、`targetEndSec` 和 `preserveAudio`，时间范围必须落在原视频完整时长内。
 
-输出前检查：无 Markdown 表格；无非专有名词英文；已通过 `generate_script` 保存完整内容；无违禁内容；总时长和镜头时长合规；用户触发劣质营销检查时，逐项验证九大红线。任一失败立即重写相关内容，直到合规。
+输出前检查：无 Markdown 表格；无非专有名词英文；已通过 `generate_script` 保存完整内容；无违禁内容；镜头时长合规（单镜头不超过 15 秒，总时长可超过 15 秒由系统自动分段）；用户触发劣质营销检查时，逐项验证九大红线。任一失败立即重写相关内容，直到合规。
 
