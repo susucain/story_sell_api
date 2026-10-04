@@ -43,10 +43,7 @@ export class SeedancePromptValidatorService {
       options.assetIdReplacements ?? {},
     )) {
       if (!assetId || !reference) continue;
-      const pattern = new RegExp(
-        `\\[?${this.escapeRegExp(assetId)}\\]?`,
-        'gi',
-      );
+      const pattern = new RegExp(`\\[?${this.escapeRegExp(assetId)}\\]?`, 'gi');
       const replaced = normalized.replace(pattern, reference);
       if (replaced !== normalized) {
         normalized = replaced;
@@ -54,10 +51,13 @@ export class SeedancePromptValidatorService {
       }
     }
 
-    const shotBlocks = normalized.match(/镜头\s*\d+[\s\S]*?(?=镜头\s*\d+|$)/g) ?? [];
+    const shotBlocks =
+      normalized.match(/镜头\s*\d+[\s\S]*?(?=镜头\s*\d+|$)/g) ?? [];
     if (shotBlocks.length >= 2) {
-      const withoutAbsoluteTimes = this.removeMultiShotAbsoluteTimes(normalized);
-      const normalizeChange = PROHIBITION_RULES.absoluteShotTime.normalizeChange;
+      const withoutAbsoluteTimes =
+        this.removeMultiShotAbsoluteTimes(normalized);
+      const normalizeChange =
+        PROHIBITION_RULES.absoluteShotTime.normalizeChange;
       if (withoutAbsoluteTimes !== normalized && normalizeChange) {
         normalized = withoutAbsoluteTimes;
         changes.push(normalizeChange);
@@ -110,19 +110,26 @@ export class SeedancePromptValidatorService {
       collect(PROHIBITION_RULES.audioOnlyInput);
     }
 
-    if (/@(?:图片|视频|音频)\d+(?=(?:跑|走|站|坐|拿|向|往|在|位于|左|右|前|后))/.test(normalized)) {
+    if (
+      /@(?:图片|视频|音频)\d+(?=(?:跑|走|站|坐|拿|向|往|在|位于|左|右|前|后))/.test(
+        normalized,
+      )
+    ) {
       collect(PROHIBITION_RULES.ambiguousAssetReference);
     }
 
-    if (/(?:严格编辑|向前延长|向后延长|延长)[\s\S]*?参考\s*@视频\d+|参考\s*@视频\d+[\s\S]*?(?:严格编辑|向前延长|向后延长|延长)/.test(normalized)) {
+    if (
+      /(?:严格编辑|向前延长|向后延长|延长)[\s\S]*?参考\s*@视频\d+|参考\s*@视频\d+[\s\S]*?(?:严格编辑|向前延长|向后延长|延长)/.test(
+        normalized,
+      )
+    ) {
       collect(PROHIBITION_RULES.editReference);
     }
 
-    const shotBlocks = normalized.match(/镜头\s*\d+[\s\S]*?(?=镜头\s*\d+|$)/g) ?? [];
+    const shotBlocks =
+      normalized.match(/镜头\s*\d+[\s\S]*?(?=镜头\s*\d+|$)/g) ?? [];
     for (const [index, shot] of shotBlocks.entries()) {
-      const moves = CAMERA_MOVE_CLASSES.map((pattern) =>
-        shot.match(pattern),
-      )
+      const moves = CAMERA_MOVE_CLASSES.map((pattern) => shot.match(pattern))
         .filter((match): match is RegExpMatchArray => Boolean(match))
         .map((match) => match[0]);
       if (moves.length > 1) {
@@ -134,7 +141,8 @@ export class SeedancePromptValidatorService {
       }
     }
 
-    const absoluteTimePattern = /(?:\d{1,2}:\d{2}(?::\d{2})?\s*[-~–—至到]\s*\d{1,2}:\d{2}(?::\d{2})?|\d+\s*(?:秒|s)|\d+\s*[-~–—至到]\s*\d+\s*(?:秒|s))/i;
+    const absoluteTimePattern =
+      /(?:\d{1,2}:\d{2}(?::\d{2})?\s*[-~–—至到]\s*\d{1,2}:\d{2}(?::\d{2})?|\d+\s*(?:秒|s)|\d+\s*[-~–—至到]\s*\d+\s*(?:秒|s))/i;
     if (shotBlocks.length >= 2 && absoluteTimePattern.test(normalized)) {
       collect(PROHIBITION_RULES.absoluteShotTime);
     }
@@ -169,8 +177,10 @@ export class SeedancePromptValidatorService {
   private removeMultiShotAbsoluteTimes(prompt: string): string {
     const timestampRange =
       /\d{1,2}:\d{2}(?::\d{2})?\s*[-~–—至到]\s*\d{1,2}:\d{2}(?::\d{2})?/gi;
-    const secondRange = /\d+(?:\.\d+)?\s*(?:秒|s)\s*[-~–—至到]\s*\d+(?:\.\d+)?\s*(?:秒|s)?/gi;
-    const compactSecondRange = /\d+(?:\.\d+)?\s*[-~–—至到]\s*\d+(?:\.\d+)?\s*(?:秒|s)/gi;
+    const secondRange =
+      /\d+(?:\.\d+)?\s*(?:秒|s)\s*[-~–—至到]\s*\d+(?:\.\d+)?\s*(?:秒|s)?/gi;
+    const compactSecondRange =
+      /\d+(?:\.\d+)?\s*[-~–—至到]\s*\d+(?:\.\d+)?\s*(?:秒|s)/gi;
     const standaloneSeconds = /\d+(?:\.\d+)?\s*(?:秒|s)\b/gi;
 
     return prompt
@@ -187,7 +197,8 @@ export class SeedancePromptValidatorService {
     const subjectCount = this.countSubjects(prompt);
     return MUST_CONTAIN_RULES.filter(
       (rule) =>
-        (!rule.multiSubjectOnly || subjectCount > 1) && !rule.present.test(prompt),
+        (!rule.multiSubjectOnly || subjectCount > 1) &&
+        !rule.present.test(prompt),
     );
   }
 
@@ -200,8 +211,8 @@ export class SeedancePromptValidatorService {
     const maxIndex = (kind: string) =>
       Math.max(
         0,
-        ...[...prompt.matchAll(new RegExp(`@${kind}(\\d+)`, 'g'))].map((match) =>
-          Number(match[1]),
+        ...[...prompt.matchAll(new RegExp(`@${kind}(\\d+)`, 'g'))].map(
+          (match) => Number(match[1]),
         ),
       );
 
@@ -234,7 +245,9 @@ export class SeedancePromptValidatorService {
     ];
 
     return visualTextPatterns.some((pattern) =>
-      [...prompt.matchAll(pattern)].some((match) => !this.isNegated(prompt, match.index ?? 0)),
+      [...prompt.matchAll(pattern)].some(
+        (match) => !this.isNegated(prompt, match.index ?? 0),
+      ),
     );
   }
 

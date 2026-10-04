@@ -18,7 +18,9 @@ describe('sd2-pe rule registry coverage', () => {
     ...MUST_CONTAIN_RULES.map((rule) => rule.id),
     ...Object.keys(PROHIBITION_RULES),
   ]);
-  const coveredClauses = new Set(SKILL_CLAUSE_COVERAGE.map((item) => item.clause));
+  const coveredClauses = new Set(
+    SKILL_CLAUSE_COVERAGE.map((item) => item.clause),
+  );
 
   beforeAll(async () => {
     skillMd = await fs.readFile(SKILL_MD_PATH, 'utf8');
@@ -35,7 +37,10 @@ describe('sd2-pe rule registry coverage', () => {
   });
 
   it('covers the mandatory SKILL.md sections', () => {
-    for (const clause of ['无文字画面（最高优先级）', '特殊字符规范（强制使用）']) {
+    for (const clause of [
+      '无文字画面（最高优先级）',
+      '特殊字符规范（强制使用）',
+    ]) {
       expect(skillMd).toContain(`## ${clause}`);
       expect(coveredClauses.has(clause)).toBe(true);
     }
@@ -62,8 +67,12 @@ describe('sd2-pe rule registry coverage', () => {
   });
 
   it('leaves no declared rule unreferenced by coverage entries', () => {
-    const referenced = new Set(SKILL_CLAUSE_COVERAGE.flatMap((entry) => entry.rules));
+    const referenced = new Set(
+      SKILL_CLAUSE_COVERAGE.flatMap((entry) => entry.rules),
+    );
 
-    expect([...declaredRuleIds].filter((id) => !referenced.has(id))).toEqual([]);
+    expect([...declaredRuleIds].filter((id) => !referenced.has(id))).toEqual(
+      [],
+    );
   });
 });

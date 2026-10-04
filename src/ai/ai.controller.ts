@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Sse, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Sse,
+  Res,
+} from '@nestjs/common';
 import { AiService } from './ai.service';
 import { Query } from '@nestjs/common';
 import { from, map } from 'rxjs';
@@ -9,7 +19,10 @@ import { UIMessage } from 'ai';
 
 @Controller('ai')
 export class AiController {
-  constructor(private readonly aiService: AiService, private readonly eventEmitter: EventEmitter2) { }
+  constructor(
+    private readonly aiService: AiService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   @Get('chat')
   async chat(@Query('query') query: string) {
@@ -18,7 +31,10 @@ export class AiController {
   }
 
   @Sse('chat/stream')
-  async streamChat(@Query('query') query: string, @Query('ttsSessionId') ttsSessionId?: string) {
+  async streamChat(
+    @Query('query') query: string,
+    @Query('ttsSessionId') ttsSessionId?: string,
+  ) {
     const sessionId = ttsSessionId?.trim?.();
 
     // 发送开始事件(请求开始时连接websocket)
@@ -47,7 +63,8 @@ export class AiController {
   @Post('chat')
   async agentChat(
     @Body() body: { messages: UIMessage[] },
-    @Res() res: Response) {
+    @Res() res: Response,
+  ) {
     if (!body.messages || !Array.isArray(body.messages)) {
       throw new Error('Invalid JSON');
     }

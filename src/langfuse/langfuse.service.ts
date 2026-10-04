@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { registerTelemetry } from 'ai';
@@ -19,16 +24,19 @@ export class LangfuseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LangfuseService.name);
   private sdk: NodeSDK | undefined;
 
-  constructor(private readonly configService: ConfigService) { }
+  constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
     const publicKey = this.configService.get<string>('LANGFUSE_PUBLIC_KEY');
     const secretKey = this.configService.get<string>('LANGFUSE_SECRET_KEY');
     const baseUrl = this.configService.get<string>('LANGFUSE_BASE_URL');
-    const enabled = this.configService.get<string>('LANGFUSE_ENABLED') !== 'false';
+    const enabled =
+      this.configService.get<string>('LANGFUSE_ENABLED') !== 'false';
 
     if (!enabled) {
-      this.logger.log('Langfuse tracing is disabled via LANGFUSE_ENABLED=false');
+      this.logger.log(
+        'Langfuse tracing is disabled via LANGFUSE_ENABLED=false',
+      );
       return;
     }
 
@@ -53,7 +61,9 @@ export class LangfuseService implements OnModuleInit, OnModuleDestroy {
     this.sdk.start();
     // 订阅 AI SDK v7 的 telemetry 事件，将其转换为 OTel span 交给 LangfuseSpanProcessor
     registerTelemetry(new LangfuseVercelAiSdkIntegration());
-    this.logger.log('Langfuse OpenTelemetry SDK started (AI SDK v7 integration)');
+    this.logger.log(
+      'Langfuse OpenTelemetry SDK started (AI SDK v7 integration)',
+    );
   }
 
   async onModuleDestroy() {

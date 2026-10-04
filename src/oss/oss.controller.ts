@@ -23,7 +23,9 @@ export class OssController {
   @UseInterceptors(FileInterceptor('file'))
   upload(@UploadedFile() file, @CurrentUser() user: AuthenticatedUser) {
     // multer 用 latin1 解码文件名，中文会乱码，需要重新按 utf8 解码
-    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    const originalName = Buffer.from(file.originalname, 'latin1').toString(
+      'utf8',
+    );
     return this.ossService.uploadFile(
       originalName,
       file.buffer,
@@ -48,13 +50,19 @@ export class OssController {
 
   /** 查询单条文件记录 */
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthenticatedUser) {
+  findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.ossService.findOne(id, user.id);
   }
 
   /** 删除文件记录 */
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthenticatedUser) {
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.ossService.remove(id, user.id);
   }
 }

@@ -5,8 +5,7 @@ describe('User entity authentication metadata', () => {
   it('uses the migration-owned unique account index', () => {
     const metadata = getMetadataArgsStorage();
     const accountIndex = metadata.indices.find(
-      (index) =>
-        index.target === User && index.name === 'IDX_users_account',
+      (index) => index.target === User && index.name === 'IDX_users_account',
     );
 
     expect(accountIndex).toEqual(

@@ -9,24 +9,28 @@ const AsrClient = tencentcloud.asr.v20190614.Client;
 
 @Module({
   controllers: [SpeechController],
-  providers: [SpeechService, TtsRelayService, {
-    provide: 'ASR_CLIENT',
-    useFactory: (configService: ConfigService) => {
-      return new AsrClient({
-        credential: {
-          secretId: configService.get<string>('SECRET_ID'),
-          secretKey: configService.get<string>('SECRET_KEY'),
-        },
-        region: 'ap-shanghai',
-        profile: {
-          httpProfile: {
-            reqMethod: 'POST',
-            reqTimeout: 30,
+  providers: [
+    SpeechService,
+    TtsRelayService,
+    {
+      provide: 'ASR_CLIENT',
+      useFactory: (configService: ConfigService) => {
+        return new AsrClient({
+          credential: {
+            secretId: configService.get<string>('SECRET_ID'),
+            secretKey: configService.get<string>('SECRET_KEY'),
           },
-        },
-      });
+          region: 'ap-shanghai',
+          profile: {
+            httpProfile: {
+              reqMethod: 'POST',
+              reqTimeout: 30,
+            },
+          },
+        });
+      },
+      inject: [ConfigService],
     },
-    inject: [ConfigService],
-  },],
+  ],
 })
-export class SpeechModule { }
+export class SpeechModule {}

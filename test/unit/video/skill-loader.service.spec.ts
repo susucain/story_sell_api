@@ -30,7 +30,12 @@ describe('SkillLoaderService', () => {
     );
 
     expect(references).toEqual(
-      expect.arrayContaining(['routing', 'character', 'storyboard', 'seedance']),
+      expect.arrayContaining([
+        'routing',
+        'character',
+        'storyboard',
+        'seedance',
+      ]),
     );
   });
 

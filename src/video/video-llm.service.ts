@@ -48,6 +48,9 @@ export class VideoLLMService {
   }
 
   getVideoModel() {
-    return this.configService.get<string>('YUNFEI_API_MODEL') || 'doubao-seedance-2-0-fast-260128';
+    return (
+      this.configService.get<string>('YUNFEI_API_MODEL') ||
+      'doubao-seedance-2-0-fast-260128'
+    );
   }
 }

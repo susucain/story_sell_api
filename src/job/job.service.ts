@@ -19,7 +19,7 @@ export class JobService implements OnApplicationBootstrap {
     private readonly entityManager: EntityManager,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly jobAgentService: JobAgentService,
-  ) { }
+  ) {}
 
   // 初始化时注册所有启用的任务定时器（nest内部生命周期钩子）
   async onApplicationBootstrap() {
@@ -67,23 +67,23 @@ export class JobService implements OnApplicationBootstrap {
   async addJob(
     input:
       | {
-        type: 'cron';
-        instruction: string;
-        cron: string;
-        isEnabled?: boolean;
-      }
+          type: 'cron';
+          instruction: string;
+          cron: string;
+          isEnabled?: boolean;
+        }
       | {
-        type: 'every';
-        instruction: string;
-        everyMs: number;
-        isEnabled?: boolean;
-      }
+          type: 'every';
+          instruction: string;
+          everyMs: number;
+          isEnabled?: boolean;
+        }
       | {
-        type: 'at';
-        instruction: string;
-        at: Date;
-        isEnabled?: boolean;
-      },
+          type: 'at';
+          instruction: string;
+          at: Date;
+          isEnabled?: boolean;
+        },
   ) {
     const entity = this.entityManager.create(Job, {
       instruction: input.instruction,
@@ -175,7 +175,7 @@ export class JobService implements OnApplicationBootstrap {
         this.logger.log(`run job ${job.id}, ${job.instruction}`);
         await this.entityManager.update(Job, job.id, {
           lastRun: new Date(),
-          isEnabled: false, // at 类型只执行一次：执行完自动停用
+          isEnabled: false, // at 类型只执行一次：执行完自动停用
         });
 
         try {

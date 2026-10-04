@@ -12,9 +12,15 @@ describe('DevelopmentAccountBootstrapService', () => {
     user?: User | null;
     passwordMatches?: boolean;
   }) {
-    const user = options?.user === undefined
-      ? ({ id: 1, account: 'dev', passwordHash: 'stored-hash', name: 'Legacy user' } as User)
-      : options.user;
+    const user =
+      options?.user === undefined
+        ? ({
+            id: 1,
+            account: 'dev',
+            passwordHash: 'stored-hash',
+            name: 'Legacy user',
+          } as User)
+        : options.user;
     const accountOwner = options?.existingAccountOwner ?? null;
     const repository = {
       findOne: jest
@@ -28,13 +34,19 @@ describe('DevelopmentAccountBootstrapService', () => {
     };
     const manager = { getRepository: jest.fn().mockReturnValue(repository) };
     const dataSource = {
-      transaction: jest.fn().mockImplementation((callback: (value: typeof manager) => unknown) => callback(manager)),
+      transaction: jest
+        .fn()
+        .mockImplementation((callback: (value: typeof manager) => unknown) =>
+          callback(manager),
+        ),
     };
     const config = new ConfigService({
       DEV_ACCOUNT: options?.account,
       DEV_ACCOUNT_PASSWORD: options?.configuredPassword,
     });
-    const bcryptCompare = jest.fn().mockResolvedValue(options?.passwordMatches ?? false);
+    const bcryptCompare = jest
+      .fn()
+      .mockResolvedValue(options?.passwordMatches ?? false);
     const bcryptHash = jest.fn().mockResolvedValue('new-password-hash');
     const service = new DevelopmentAccountBootstrapService(
       dataSource as never,

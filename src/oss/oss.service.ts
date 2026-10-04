@@ -12,15 +12,22 @@ const DEFAULT_TRANSFER_MAX_BYTES = 1024 * 1024 * 1024;
 
 function isPrivateAddress(address: string): boolean {
   if (address === '::1' || address === '0.0.0.0') return true;
-  if (address.startsWith('fe80:') || address.startsWith('fc') || address.startsWith('fd')) return true;
+  if (
+    address.startsWith('fe80:') ||
+    address.startsWith('fc') ||
+    address.startsWith('fd')
+  )
+    return true;
   if (isIP(address) !== 4) return false;
   const [first, second] = address.split('.').map(Number);
-  return first === 10
-    || first === 127
-    || first === 0
-    || (first === 169 && second === 254)
-    || (first === 172 && second >= 16 && second <= 31)
-    || (first === 192 && second === 168);
+  return (
+    first === 10 ||
+    first === 127 ||
+    first === 0 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
 }
 
 @Injectable()
@@ -40,14 +47,20 @@ export class OssService {
       bucket: configService.get<string>('OSS_BUCKET_NAME'),
     });
     this.transferMaxBytes = Number(
-      configService.get<string>('OSS_TRANSFER_MAX_BYTES') || DEFAULT_TRANSFER_MAX_BYTES,
+      configService.get<string>('OSS_TRANSFER_MAX_BYTES') ||
+        DEFAULT_TRANSFER_MAX_BYTES,
     );
   }
 
   /** 下载可信外部文件并流式转存到 OSS。 */
   async transferFromUrl(
     sourceUrl: string,
-    options: { ossKey: string; fileName: string; allowedMimeTypes: string[]; userId: number },
+    options: {
+      ossKey: string;
+      fileName: string;
+      allowedMimeTypes: string[];
+      userId: number;
+    },
   ) {
     const url = await this.validateTransferUrl(sourceUrl);
     const controller = new AbortController();
@@ -59,14 +72,18 @@ export class OssService {
         signal: controller.signal,
       });
       if (!response.ok || !response.body) {
-        throw new BadRequestException(`下载生成文件失败: HTTP ${response.status}`);
+        throw new BadRequestException(
+          `下载生成文件失败: HTTP ${response.status}`,
+        );
       }
 
       const mimeType = (response.headers.get('content-type') || '')
         .split(';', 1)[0]
         .toLowerCase();
       if (!options.allowedMimeTypes.includes(mimeType)) {
-        throw new BadRequestException(`不支持的生成文件类型: ${mimeType || 'unknown'}`);
+        throw new BadRequestException(
+          `不支持的生成文件类型: ${mimeType || 'unknown'}`,
+        );
       }
 
       const contentLength = Number(response.headers.get('content-length') || 0);
@@ -82,9 +99,9 @@ export class OssService {
       const ossFile = this.ossFileRepo.create({
         fileName: options.fileName,
         url: result.url,
-      fileType: mimeType,
-      createdBy: 'video_generation',
-      userId: options.userId,
+        fileType: mimeType,
+        createdBy: 'video_generation',
+        userId: options.userId,
       });
       await this.ossFileRepo.save(ossFile);
       return { url: result.url, fileType: mimeType, ossKey: options.ossKey };
@@ -107,7 +124,10 @@ export class OssService {
       throw new BadRequestException('生成文件地址不允许访问本机');
     }
     const addresses = await lookup(url.hostname, { all: true });
-    if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
+    if (
+      addresses.length === 0 ||
+      addresses.some(({ address }) => isPrivateAddress(address))
+    ) {
       throw new BadRequestException('生成文件地址不允许访问内网');
     }
     return url;

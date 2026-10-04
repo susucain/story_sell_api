@@ -49,9 +49,13 @@ describe('SeedancePromptValidatorService', () => {
   });
 
   it('rejects reference phrasing in a video edit request', () => {
-    const result = validator.validate('严格编辑 @视频1，参考 @视频1，将背景替换为海边。');
+    const result = validator.validate(
+      '严格编辑 @视频1，参考 @视频1，将背景替换为海边。',
+    );
 
-    expect(result.errors).toContainEqual(expect.stringContaining('编辑或延长任务'));
+    expect(result.errors).toContainEqual(
+      expect.stringContaining('编辑或延长任务'),
+    );
   });
 
   it('warns on conflicting camera moves in one shot', () => {
@@ -77,13 +81,17 @@ describe('SeedancePromptValidatorService', () => {
   });
 
   it('warns on absolute times in multi-shot prompts', () => {
-    const result = validator.validate('镜头1：0-3秒，固定镜头。镜头2：3-6秒，跟拍主体。');
+    const result = validator.validate(
+      '镜头1：0-3秒，固定镜头。镜头2：3-6秒，跟拍主体。',
+    );
 
     expect(result.warnings).toContainEqual(expect.stringContaining('绝对秒数'));
   });
 
   it('warns on timestamp ranges in multi-shot prompts', () => {
-    const result = validator.validate('镜头1：0:00-0:03，固定镜头。镜头2：0:03-0:06，跟拍主体。');
+    const result = validator.validate(
+      '镜头1：0:00-0:03，固定镜头。镜头2：0:03-0:06，跟拍主体。',
+    );
 
     expect(result.warnings).toContainEqual(expect.stringContaining('绝对秒数'));
   });
@@ -240,7 +248,9 @@ describe('SeedancePromptValidatorService', () => {
       '镜头1：近景，<主体1> 低头笑着说“骗你们的”，舍友追着打闹。高清电影质感，画面稳定无变形，保持无字幕，避免生成任何文字或字幕，不要生成水印，不要生成 Logo。',
     );
 
-    expect(result.errors).toContainEqual(expect.stringContaining('台词必须使用'));
+    expect(result.errors).toContainEqual(
+      expect.stringContaining('台词必须使用'),
+    );
   });
 
   it('accepts dialogue wrapped in braces', () => {

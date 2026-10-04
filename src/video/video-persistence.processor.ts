@@ -13,7 +13,10 @@ export class VideoPersistenceProcessor {
     } catch (error) {
       const attempts = job.opts.attempts ?? 1;
       if (job.attemptsMade + 1 >= attempts) {
-        await this.videoTaskService.markVideoPersistenceFailed(job.data.taskId, error);
+        await this.videoTaskService.markVideoPersistenceFailed(
+          job.data.taskId,
+          error,
+        );
       }
       throw error;
     }

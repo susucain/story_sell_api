@@ -16,7 +16,10 @@ describe('deploy-backend.sh', () => {
       const scriptPath = join(tempDir, 'deploy-backend.sh');
 
       execFileSync('mkdir', ['-p', deployDir, fakeBin]);
-      writeFileSync(join(deployDir, 'docker-compose.prod.yml'), 'services: {}\n');
+      writeFileSync(
+        join(deployDir, 'docker-compose.prod.yml'),
+        'services: {}\n',
+      );
       writeFileSync(
         appEnv,
         [
@@ -54,16 +57,12 @@ describe('deploy-backend.sh', () => {
         ].join('\n'),
         { mode: 0o700 },
       );
-      writeFileSync(
-        join(fakeBin, 'curl'),
-        '#!/usr/bin/env bash\nexit 1\n',
-        { mode: 0o700 },
-      );
-      writeFileSync(
-        join(fakeBin, 'sleep'),
-        '#!/usr/bin/env bash\nexit 0\n',
-        { mode: 0o700 },
-      );
+      writeFileSync(join(fakeBin, 'curl'), '#!/usr/bin/env bash\nexit 1\n', {
+        mode: 0o700,
+      });
+      writeFileSync(join(fakeBin, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', {
+        mode: 0o700,
+      });
 
       expect(() =>
         execFileSync(scriptPath, ['registry.example/new-image:sha-new'], {

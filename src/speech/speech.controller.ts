@@ -10,7 +10,7 @@ import { SpeechService } from './speech.service';
 
 @Controller('speech')
 export class SpeechController {
-  constructor(private readonly speechService: SpeechService) { }
+  constructor(private readonly speechService: SpeechService) {}
 
   @Post('asr')
   @UseInterceptors(FileInterceptor('audio'))

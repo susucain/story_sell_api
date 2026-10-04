@@ -10,9 +10,7 @@ export type PasswordHasher = Pick<typeof bcrypt, 'compare' | 'hash'>;
 export const PASSWORD_HASHER = Symbol('PASSWORD_HASHER');
 
 @Injectable()
-export class DevelopmentAccountBootstrapService
-  implements OnApplicationBootstrap
-{
+export class DevelopmentAccountBootstrapService implements OnApplicationBootstrap {
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,

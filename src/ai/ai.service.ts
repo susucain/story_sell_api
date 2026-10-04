@@ -4,8 +4,13 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import type { Runnable } from '@langchain/core/runnables';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { Inject } from '@nestjs/common';
-import { AIMessageChunk, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
-import { InMemoryChatMessageHistory } from "@langchain/core/chat_history";
+import {
+  AIMessageChunk,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from '@langchain/core/messages';
+import { InMemoryChatMessageHistory } from '@langchain/core/chat_history';
 import { StructuredTool } from '@langchain/core/tools';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AI_TTS_STREAM_EVENT } from '../common/stream-events';
@@ -30,19 +35,24 @@ export class AiService {
     @Inject('CRON_JOB_TOOL') private readonly cronJobTool: any,
     private readonly eventEmitter: EventEmitter2,
   ) {
-    const prompt = PromptTemplate.fromTemplate(
-      '请回答以下问题：\n\n{query}',
-    );
+    const prompt = PromptTemplate.fromTemplate('请回答以下问题：\n\n{query}');
 
     this.chain = prompt.pipe(model).pipe(new StringOutputParser());
-    this.tools = [this.queryUserTool, this.sendMailTool, this.webSearchTool, this.dbUsersCrudTool, this.cronJobTool];
+    this.tools = [
+      this.queryUserTool,
+      this.sendMailTool,
+      this.webSearchTool,
+      this.dbUsersCrudTool,
+      this.cronJobTool,
+    ];
     this.modelWithTool = model.bindTools(this.tools);
 
     // 创建智能体(langchain实现，会自动实现agent loop)
     this.agent = createAgent({
       model: model,
       tools: this.tools,
-      systemPrompt: '你是 AI 助手，需要最新信息、事实核查或联网信息时，请使用 web_search 工具搜索后再作答。',
+      systemPrompt:
+        '你是 AI 助手，需要最新信息、事实核查或联网信息时，请使用 web_search 工具搜索后再作答。',
     });
   }
 
@@ -57,8 +67,8 @@ export class AiService {
         const event = {
           type: 'chunk',
           sessionId: ttsSessionId,
-          chunk
-        }
+          chunk,
+        };
         this.eventEmitter.emit(AI_TTS_STREAM_EVENT, event);
       }
       yield chunk;
@@ -81,9 +91,9 @@ export class AiService {
 
 当用户请求“在未来某个时间点执行某个动作”（例如“1分钟后给我发一个笑话到邮箱”）时，本轮对话只需要使用 \`cron_job\` 设置/更新定时任务，不要在当前轮直接完成这个动作本身：不要直接调用 \`send_mail\` 给他发邮件，也不要在当前轮就真正“执行”指令，只需把要执行的动作写进 \`instruction\` 里，交给将来的定时任务去跑。
 
-注意：像“\`1分钟后提醒我喝水\`”，时间相关信息用于计算下一次执行时间，而 \`instruction\` 应该是“提醒我喝水”；本轮不需要立刻提醒。`
+注意：像“\`1分钟后提醒我喝水\`”，时间相关信息用于计算下一次执行时间，而 \`instruction\` 应该是“提醒我喝水”；本轮不需要立刻提醒。`,
       ),
-      new HumanMessage(query)
+      new HumanMessage(query),
     ]);
 
     while (true) {
@@ -126,12 +136,14 @@ export class AiService {
       new SystemMessage(
         '你是一个智能助手，可以在需要时调用工具（如 query_user）来查询用户信息，再用结果回答用户的问题。',
       ),
-      new HumanMessage(query)
+      new HumanMessage(query),
     ]);
 
     while (true) {
       const messages = await history.getMessages();
-      const aiMessage = await this.modelWithTool.stream(messages) as AsyncIterable<AIMessageChunk>;
+      const aiMessage = (await this.modelWithTool.stream(
+        messages,
+      )) as AsyncIterable<AIMessageChunk>;
 
       let fullAIMsg: AIMessageChunk | null = null;
       for await (const chunk of aiMessage) {
@@ -140,7 +152,6 @@ export class AiService {
         if (!fullAIMsg?.tool_calls?.length && chunk.content) {
           yield chunk.content;
         }
-
       }
 
       if (!fullAIMsg) {

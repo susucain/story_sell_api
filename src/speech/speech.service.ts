@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type * as tencentcloud from 'tencentcloud-sdk-nodejs'; 
+import type * as tencentcloud from 'tencentcloud-sdk-nodejs';
 
 type UploadedAudio = {
   buffer: Buffer;
@@ -12,7 +12,7 @@ type AsrClient = InstanceType<typeof tencentcloud.asr.v20190614.Client>;
 
 @Injectable()
 export class SpeechService {
-  constructor(@Inject('ASR_CLIENT') private readonly asrClient: AsrClient) { }
+  constructor(@Inject('ASR_CLIENT') private readonly asrClient: AsrClient) {}
 
   async recognizeBySentence(file: UploadedAudio): Promise<string> {
     const audioBase64 = file.buffer.toString('base64');

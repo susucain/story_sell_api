@@ -26,8 +26,9 @@ describe('OSS ownership boundaries', () => {
       findOneBy: jest.fn().mockResolvedValue(null),
     };
 
-    await expect(OssService.prototype.remove.call({ ossFileRepo }, 10, 6))
-      .resolves.toBeNull();
+    await expect(
+      OssService.prototype.remove.call({ ossFileRepo }, 10, 6),
+    ).resolves.toBeNull();
     expect(ossFileRepo.findOneBy).toHaveBeenCalledWith({ id: 10, userId: 6 });
     expect(ossFileRepo.delete).not.toHaveBeenCalled();
   });

@@ -74,7 +74,12 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '软萌可爱的年轻女性插画师，创意感强、表达亲和',
     keywords: ['创意', '美术', '文创', '设计', '年轻女性'],
     defaultOutfitId: 'modern-casual',
-    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-commute', 'modern-casual'],
+    allowedOutfitIds: [
+      'modern-store-visit',
+      'modern-sexy-store-visit',
+      'modern-commute',
+      'modern-casual',
+    ],
   },
   {
     id: 'asset-20260720213034-z8rzr',
@@ -86,7 +91,12 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '干练亲和的年轻女性互联网实习生，职场通勤气质',
     keywords: ['科技', '职场', '商务', '互联网', '通勤'],
     defaultOutfitId: 'modern-commute',
-    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-commute', 'modern-casual'],
+    allowedOutfitIds: [
+      'modern-store-visit',
+      'modern-sexy-store-visit',
+      'modern-commute',
+      'modern-casual',
+    ],
   },
   {
     id: 'asset-20260720210605-r4fdc',
@@ -98,7 +108,12 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '温婉清新的女性国风插画师，现代国风气质',
     keywords: ['国风', '文旅', '传统文化', '非遗', '茶文化'],
     defaultOutfitId: 'modern-casual',
-    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-commute', 'modern-casual'],
+    allowedOutfitIds: [
+      'modern-store-visit',
+      'modern-sexy-store-visit',
+      'modern-commute',
+      'modern-casual',
+    ],
   },
   {
     id: 'asset-20260720212016-qfsgq',
@@ -110,7 +125,12 @@ export const PRESET_AVATARS: readonly PresetAvatar[] = [
     identityPrompt: '自然利落的女性新媒体运营，适合镜头前口播',
     keywords: ['探店', '餐饮', '本地生活', '带货', '口播'],
     defaultOutfitId: 'modern-store-visit',
-    allowedOutfitIds: ['modern-store-visit', 'modern-sexy-store-visit', 'modern-casual', 'modern-commute'],
+    allowedOutfitIds: [
+      'modern-store-visit',
+      'modern-sexy-store-visit',
+      'modern-casual',
+      'modern-commute',
+    ],
   },
   {
     id: 'asset-20260804202300-dfnsm',
@@ -353,9 +373,11 @@ export function validateAvatarCatalogIntegrity(): void {
     }
     for (const outfitId of avatar.allowedOutfitIds) {
       const outfit = PRESET_OUTFITS.find((item) => item.id === outfitId);
-      if (!outfit
-        || !outfit.visualFamilies.includes(avatar.visualFamily)
-        || !outfit.allowedAvatarIds.includes(avatar.id)) {
+      if (
+        !outfit ||
+        !outfit.visualFamilies.includes(avatar.visualFamily) ||
+        !outfit.allowedAvatarIds.includes(avatar.id)
+      ) {
         throw new Error(`${avatar.alias}关联了不兼容的服装`);
       }
     }
