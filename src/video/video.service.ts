@@ -671,11 +671,14 @@ export class VideoService {
     sessionId: string,
     userId: number,
   ): Promise<UIMessage[]> {
+    // 取「最近」200 条再翻转为时间正序：ASC + take 会命中最早的 200 条，
+    // 长会话刷新后会丢掉最新消息。take 后再 reverse 才能保证拿到尾部窗口。
     const messages = await this.messageRepo.find({
       where: { sessionId, userId },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: 'DESC' },
       take: 200,
     });
+    messages.reverse();
 
     const videoTaskMessageIds = new Set<string>();
     const visibleMessages = messages.filter((message) => {
